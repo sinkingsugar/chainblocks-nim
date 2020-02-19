@@ -397,7 +397,7 @@ macro chainblock*(blk: untyped; blockName: string; namespaceStr: string = ""; te
     cleanupProc = ident($blk & "_cleanup")
   
   result = quote do:
-    import macros # used!
+    # import macros # used!
     
     type
       `rtNameValue` = object
@@ -471,7 +471,7 @@ macro chainblock*(blk: untyped; blockName: string; namespaceStr: string = ""; te
       result.activate = cast[CBActivateProc](`activateProc`.pointer)
       result.cleanup = cast[CBCleanupProc](`cleanupProc`.pointer)
 
-when isMainModule:
+when isMainModule or defined(test_block):
   var v: CBVar
   echo v
 
