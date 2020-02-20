@@ -21,6 +21,7 @@ type
     Run,
     Test,
     Release,
+    CDebug,
     StaticLib
 
 proc build(filename: string; features: set[Features] = {}) =
@@ -34,6 +35,8 @@ proc build(filename: string; features: set[Features] = {}) =
     cmd &= " --app:staticlib -d:auto_nim_main --noMain -o:" & name & ".a "
   if Test in features:
     cmd &= " -d:test_block "
+  if CDebug in features:
+    cmd &= " --passC:-g "
   cmd &= filename
   exec cmd
 
@@ -41,7 +44,7 @@ task compile, "Build all":
   build "src/chainblocks.nim"
 
 task test, "Build all":
-  build "src/chainblocks.nim", {StaticLib, Test}
+  build "src/chainblocks.nim", {StaticLib, Test, CDebug}
 
 task libs, "Build static libs":
   build "src/chainblocks.nim", {StaticLib}

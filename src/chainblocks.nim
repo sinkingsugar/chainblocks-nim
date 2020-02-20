@@ -1,5 +1,5 @@
 import nimline
-import os, macros
+import os, macros, options
 
 const
   modulePath = currentSourcePath().splitPath().head
@@ -331,7 +331,7 @@ template `blockValue=`*(v: CBVar, val: auto) = v.payload.blockValue = val
 template `enumValue=`*(v: CBVar, val: auto) = v.payload.enumValue = val
 template `enumVendorId=`*(v: CBVar, val: auto) = v.payload.enumVendorId = val
 template `enumTypeId=`*(v: CBVar, val: auto) = v.payload.enumTypeId = val
-
+  
 # registerCppType CBChain
 # registerCppType CBNode
 # registerCppType CBContextObj
@@ -344,16 +344,18 @@ template `enumTypeId=`*(v: CBVar, val: auto) = v.payload.enumTypeId = val
 # registerCppType CBFloat3
 # registerCppType CBFloat4
 
-# Make those optional
-template help*(b: auto): cstring = ""
-template setup*(b: auto) = discard
-template destroy*(b: auto) = discard
-template exposedVariables*(b: auto): CBExposedTypesInfo = CBExposedTypesInfo()
-template requiredVariables*(b: auto): CBExposedTypesInfo = CBExposedTypesInfo()
-template parameters*(b: auto): CBParametersInfo = CBParametersInfo()
-template setParam*(b: auto; index: int; val: CBVar) = discard
-template getParam*(b: auto; index: int): CBVar = CBVar(valueType: None)
-template cleanup*(b: auto) = discard
+proc help*(b: auto): cstring = ""
+proc init*(_: type[auto]) = discard
+proc setup*(b: auto) = discard
+proc destroy*(b: auto) = discard
+proc inputTypes(b: auto): ptr seq[CBTypeInfo] = {.error: "a block must implement inputTypes directly".}
+proc outputTypes(b: auto): ptr seq[CBTypeInfo] = {.error: "a block must implement outputTypes directly".}
+proc exposedVariables*(b: auto): ptr seq[CBExposedTypeInfo] = nil
+proc requiredVariables*(b: auto): ptr seq[CBExposedTypeInfo] = nil
+proc parameters*(b: auto): ptr seq[CBParameterInfo] = nil
+proc setParam*(b: auto; index: int; val: CBVar) = discard
+proc getParam*(b: auto; index: int): CBVar = CBVar(valueType: None)
+proc cleanup*(b: auto) = discard
 
 # Allocators using cpp to properly construct in C++ fashion (we have some blocks that need this)
 template cppnew*(pt, typ1, typ2: untyped): untyped = emitc(`pt`, " = reinterpret_cast<", `typ1`, "*>(new ", `typ2`, "());")
@@ -418,15 +420,35 @@ macro chainblock*(blk: untyped; blockName: string; namespaceStr: string = ""; te
       b.sb.destroy()
       cppdel(b)
     proc `inputTypesProc`*(b: `rtName`): CBTypesInfo {.cdecl.} =
-      b.sb.inputTypes()
+      result = CBTypesInfo(elements: nil, len: 0, cap: 0)
+      var info = b.sb.inputTypes()
+      if info != nil:
+        result.elements = cast[ptr UncheckedArray[CBTypeInfo]](addr info[][0])
+        result.len = info[].len.int32
     proc `outputTypesProc`*(b: `rtName`): CBTypesInfo {.cdecl.} =
-      b.sb.outputTypes()
+      result = CBTypesInfo(elements: nil, len: 0, cap: 0)
+      var info = b.sb.outputTypes()
+      if info != nil:
+        result.elements = cast[ptr UncheckedArray[CBTypeInfo]](addr info[][0])
+        result.len = info[].len.int32
     proc `exposedVariablesProc`*(b: `rtName`): CBExposedTypesInfo {.cdecl.} =
-      b.sb.exposedVariables()
+      result = CBExposedTypesInfo(elements: nil, len: 0, cap: 0)
+      var info = b.sb.exposedVariables()
+      if info != nil:
+        result.elements = cast[ptr UncheckedArray[CBExposedTypeInfo]](addr info[][0])
+        result.len = info[].len.int32
     proc `requiredVariablesProc`*(b: `rtName`): CBExposedTypesInfo {.cdecl.} =
-      b.sb.requiredVariables()
+      result = CBExposedTypesInfo(elements: nil, len: 0, cap: 0)
+      var info = b.sb.requiredVariables()
+      if info != nil:
+        result.elements = cast[ptr UncheckedArray[CBExposedTypeInfo]](addr info[][0])
+        result.len = info[].len.int32
     proc `parametersProc`*(b: `rtName`): CBParametersInfo {.cdecl.} =
-      b.sb.parameters()
+      result = CBParametersInfo(elements: nil, len: 0, cap: 0)
+      var info = b.sb.parameters()
+      if info != nil:
+        result.elements = cast[ptr UncheckedArray[CBParameterInfo]](addr info[][0])
+        result.len = info[].len.int32
     proc `setParamProc`*(b: `rtName`; index: int; val: CBVar) {.cdecl.} =
       b.sb.setParam(index, val)
     proc `getParamProc`*(b: `rtName`; index: int): CBVar {.cdecl.} =
@@ -450,13 +472,6 @@ macro chainblock*(blk: untyped; blockName: string; namespaceStr: string = ""; te
       result.help = cast[CBHelpProc](`helpProc`.pointer)
       result.setup = cast[CBSetupProc](`setupProc`.pointer)
       result.destroy = cast[CBDestroyProc](`destroyProc`.pointer)
-      
-      # pre post are optional!
-      when compiles((var x: `blk`; x.preChain(nil))):
-        result.preChain = cast[CBPreChainProc](`preChainProc`.pointer)
-      when compiles((var x: `blk`; x.postChain(nil))):
-        result.postChain = cast[CBPostChainProc](`postChainProc`.pointer)
-      
       result.inputTypes = cast[CBInputTypesProc](`inputTypesProc`.pointer)
       result.outputTypes = cast[CBOutputTypesProc](`outputTypesProc`.pointer)
       result.exposedVariables = cast[CBExposedVariablesProc](`exposedVariablesProc`.pointer)
@@ -471,24 +486,35 @@ macro chainblock*(blk: untyped; blockName: string; namespaceStr: string = ""; te
       result.activate = cast[CBActivateProc](`activateProc`.pointer)
       result.cleanup = cast[CBCleanupProc](`cleanupProc`.pointer)
 
-when isMainModule or defined(test_block):
-  var v: CBVar
-  echo v
+    # also run static init
+    `blk`.init()
 
+# must link like -Wl,--whole-archive -lhttp -Wl,--no-whole-archive
+      
+when isMainModule or defined(test_block):
   type
     CBPow2Block = object
       inputValue: float
       params: array[1, CBVar]
   
-  proc inputTypes*(b: var CBPow2Block): CBTypesInfo = CBTypesInfo()
-  proc outputTypes*(b: var CBPow2Block): CBTypesInfo = CBTypesInfo()
-  proc parameters*(b: var CBPow2Block): CBParametersInfo = CBParametersInfo()
+  var v: CBVar
+  echo v
+
+  # we need to leak those or NimMain will wipe them out
+  var anyInfo: ptr seq[CBTypeInfo] = cast[ptr seq[CBTypeInfo]](alloc0(sizeof(seq[CBTypeInfo])))
+  anyInfo[] =  @[CBTypeInfo(basicType: CBType.Any)]
+  var sinfo: ptr seq[CBParameterInfo] = cast[ptr seq[CBParameterInfo]](alloc0(sizeof(seq[CBParameterInfo])))
+  sinfo[] = @[CBParameterInfo(name: "P1")]
+
+  proc inputTypes*(b: var CBPow2Block): ptr seq[CBTypeInfo] = anyInfo
+  proc outputTypes*(b: var CBPow2Block): ptr seq[CBTypeInfo] = anyInfo
+  proc parameters*(b: var CBPow2Block): ptr seq[CBParameterInfo] = sinfo
   proc setParam*(b: var CBPow2Block; index: int; val: CBVar) = b.params[0] = val
   proc getParam*(b: var CBPow2Block; index: int): CBVar = b.params[0]
   proc activate*(b: var CBPow2Block; context: CBContext; input: CBVar): CBVar =
     echo "Yes nim..."
     CBVar()
-
+  
   chainblock CBPow2Block, "Pow2StaticBlock"
   
 # var
