@@ -426,6 +426,21 @@ proc unsafeFrom*(_: type[CBParametersInfo]; infos: openarray[CBParameterInfo]): 
   result.len = infos.len.uint32
   result.cap = 0
 
+proc info*(_: type[CBExposedTypeInfo]; name, help: static[cstring]; typeInfo: CBTypeInfo): CBExposedTypeInfo =
+  zeroMem(addr result, sizeof(CBExposedTypeInfo))
+  result.name = name
+  result.help = help
+  result.exposedType = typeInfo
+
+proc info*(_: type[CBExposedTypeInfo]; name: static[string]; typeInfo: CBTypeInfo): CBExposedTypeInfo =
+  return CBExposedTypeInfo.info(name, "", typeInfo)
+
+proc unsafeFrom*(_: type[CBExposedTypesInfo]; infos: openarray[CBExposedTypeInfo]): CBExposedTypesInfo =
+  zeroMem(addr result, sizeof(CBExposedTypesInfo))
+  result.elements = cast[ptr UncheckedArray[CBExposedTypeInfo]](unsafeaddr infos[0])
+  result.len = infos.len.uint32
+  result.cap = 0
+
 let
   NoneType* = CBType.None.info()
   
@@ -455,6 +470,7 @@ let
 proc help*(b: auto): cstring =
   const msg = typedesc[type(b)].name & " is using default help proc"
   {.hint: msg.}
+  ""
 proc init*(T: type[auto]) =
   const msg = typedesc[T].name & " is using default init proc"
   {.hint: msg.}
@@ -467,21 +483,23 @@ proc destroy*(b: auto) =
 proc inputTypes*(b: auto): CBTypesInfo =
   const msg = typedesc[type(b)].name & " is using default inputTypes proc with AnyTypes"
   {.warning: msg.}
+  AnyTypes
 proc outputTypes*(b: auto): CBTypesInfo =
   const msg = typedesc[type(b)].name & " is using default outputTypes proc with AnyTypes"
   {.warning: msg.}
-proc exposedVariables*(b: auto): ptr seq[CBExposedTypeInfo] =
+  AnyTypes
+proc exposedVariables*(b: auto): CBExposedTypesInfo =
+  zeroMem(addr result, sizeof(CBExposedTypesInfo))
   const msg = typedesc[type(b)].name & " is using default exposedVariables proc"
   {.hint: msg.}
-  nil
-proc requiredVariables*(b: auto): ptr seq[CBExposedTypeInfo] =
+proc requiredVariables*(b: auto): CBExposedTypesInfo =
+  zeroMem(addr result, sizeof(CBExposedTypesInfo))
   const msg = typedesc[type(b)].name & " is using default requiredVariables proc"
   {.hint: msg.}
-  nil
 proc parameters*(b: auto): CBParametersInfo =
+  zeroMem(addr result, sizeof(CBParametersInfo))
   const msg = typedesc[type(b)].name & " is using default parameters proc"
   {.hint: msg.}
-  nil
 proc setParam*(b: auto; index: int; val: CBVar) =
   const msg = typedesc[type(b)].name & " is using default setParam proc"
   {.hint: msg.}
@@ -570,17 +588,9 @@ macro chainblock*(blk: untyped; blockName: string; namespaceStr: string = ""; te
     proc `outputTypesProc`*(b: `rtName`): CBTypesInfo {.cdecl.} =
       b.sb.outputTypes()
     proc `exposedVariablesProc`*(b: `rtName`): CBExposedTypesInfo {.cdecl.} =
-      result = CBExposedTypesInfo(elements: nil, len: 0, cap: 0)
-      var info = b.sb.exposedVariables()
-      if info != nil:
-        result.elements = cast[ptr UncheckedArray[CBExposedTypeInfo]](addr info[][0])
-        result.len = info[].len.uint32
+      b.sb.exposedVariables()
     proc `requiredVariablesProc`*(b: `rtName`): CBExposedTypesInfo {.cdecl.} =
-      result = CBExposedTypesInfo(elements: nil, len: 0, cap: 0)
-      var info = b.sb.requiredVariables()
-      if info != nil:
-        result.elements = cast[ptr UncheckedArray[CBExposedTypeInfo]](addr info[][0])
-        result.len = info[].len.uint32
+      b.sb.requiredVariables()
     when compiles((var x: `blk`; discard x.compose(CBInstanceData()))):
       proc `composeProc`*(b: `rtName`; data: CBInstanceData): CBTypeInfo =
         const msg =  `namespace` & `blockName` & " has compose proc!"
