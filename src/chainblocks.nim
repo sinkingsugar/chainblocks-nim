@@ -28,16 +28,16 @@ type
   CBPointer* {.importcpp: "CBPointer", header: "chainblocks.hpp".} = pointer
   CBString* {.importcpp: "CBString", header: "chainblocks.hpp".} = distinct cstring
   CBSeq* {.importcpp: "CBSeq", header: "chainblocks.hpp".} = object
-    elements: ptr UncheckedArray[CBVar]
-    len: uint32
-    cap: uint32
+    elements*: ptr UncheckedArray[CBVar]
+    len*: uint32
+    cap*: uint32
   CBTable* {.importcpp: "CBTable", header: "chainblocks.hpp".} = object
     opaque: pointer
     api: pointer # TODO
   CBStrings* {.importcpp: "CBStrings", header: "chainblocks.hpp".} = object
-    elements: ptr UncheckedArray[CBString]
-    len: uint32
-    cap: uint32
+    elements*: ptr UncheckedArray[CBString]
+    len*: uint32
+    cap*: uint32
   CBEnum* {.importcpp: "CBEnum", header: "chainblocks.hpp".} = distinct int32
 
   
@@ -194,6 +194,7 @@ type
 
   CBInferTypesProc*{.importcpp: "CBInferTypesProc", header: "chainblocks.hpp".}  = proc(b: ptr CBlock; inputType: CBTypeInfo; consumables: CBExposedTypesInfo): CBTypeInfo {.cdecl.}
 
+  CBWarmupProc* {.importcpp: "CBWarmupProc", header: "chainblocks.hpp".} = proc(b: ptr CBlock; context: CBContext) {.cdecl.}
   CBActivateProc* {.importcpp: "CBActivateProc", header: "chainblocks.hpp".} = proc(b: ptr CBlock; context: CBContext; input: CBVar): CBVar {.cdecl.}
   CBCleanupProc* {.importcpp: "CBCleanupProc", header: "chainblocks.hpp".} = proc(b: ptr CBlock) {.cdecl.}
 
@@ -221,6 +222,7 @@ type
 
     inferTypes*: CBInferTypesProc
 
+    warmup*: CBWarmupProc
     activate*: CBActivateProc
     cleanup*: CBCleanupProc
 
@@ -352,6 +354,28 @@ template `enumTypeId=`*(v: CBVar, val: auto) = v.payload.enumTypeId = val
 # registerCppType CBFloat3
 # registerCppType CBFloat4
 
+type SupportedTypes = SomeOrdinal | seq[CBVar]
+
+proc intoCBVar*[T](value: T): CBVar =
+  zeroMem(addr result, sizeof(CBVar))
+
+  when T is SomeOrdinal:
+    result.valueType = CBType.Int
+    assert T.high <= int64.high
+    result.intValue = value.int64
+
+  when T is seq[CBVar]:
+    result.valueType = CBType.Seq
+    assert value.len <= uint32.high.int
+    result.seqValue.len = value.len.uint32
+    result.seqValue.cap = 0
+    result.seqValue.elements = cast[ptr UncheckedArray[CBVar]](unsafeaddr value[0])
+
+  # else, won't work it seems
+  when T isnot SupportedTypes:
+    const msg = typedesc[T].name & " intoCBVar is still a TODO!"
+    {.error: msg.}
+
 proc toFourCC*(c1, c2, c3, c4: char): FourCC {.compileTime.} =
   return FourCC((ord(c1).cint and 255) + ((ord(c2).cint and 255) shl 8) +
     ((ord(c3).cint and 255) shl 16) + ((ord(c4).cint and 255) shl 24))
@@ -382,9 +406,24 @@ proc info*(t: static[CBType],
   else:
     discard
 
-proc make*(_: type[CBTypesInfo]; infos: openarray[CBTypeInfo]): CBTypesInfo =
+proc unsafeFrom*(_: type[CBTypesInfo]; infos: openarray[CBTypeInfo]): CBTypesInfo =
   zeroMem(addr result, sizeof(CBTypesInfo))
   result.elements = cast[ptr UncheckedArray[CBTypeInfo]](unsafeaddr infos[0])
+  result.len = infos.len.uint32
+  result.cap = 0
+
+proc info*(_: type[CBParameterInfo]; name, help: static[cstring]; types: CBTypesInfo): CBParameterInfo =
+  zeroMem(addr result, sizeof(CBParameterInfo))
+  result.name = name
+  result.help = help
+  result.valueTypes = types
+
+proc info*(_: type[CBParameterInfo]; name: static[string]; types: CBTypesInfo): CBParameterInfo =
+  return CBParameterInfo.info(name, "", types)
+
+proc unsafeFrom*(_: type[CBParametersInfo]; infos: openarray[CBParameterInfo]): CBParametersInfo =
+  zeroMem(addr result, sizeof(CBParametersInfo))
+  result.elements = cast[ptr UncheckedArray[CBParameterInfo]](unsafeaddr infos[0])
   result.len = infos.len.uint32
   result.cap = 0
 
@@ -394,16 +433,23 @@ let
   AnyType* = CBType.Any.info()
   anysData = [AnyType]
   AnySeqType* = CBType.Seq.info(seqTypes = anysData)
-  AnyTypes* = CBTypesInfo.make(anysData)
+  AnyTypes* = CBTypesInfo.unsafe_from(anysData)
   anySeqsData = [AnySeqType]
-  AnySeqTypes* = CBTypesInfo.make(anySeqsData)
+  AnySeqTypes* = CBTypesInfo.unsafe_from(anySeqsData)
 
   FloatType* = CBType.Float.info()
   floatsData = [FloatType]
   FloatSeqType* = CBType.Seq.info(seqTypes = floatsData)
-  FloatTypes* = CBTypesInfo.make(floatsData)
+  FloatTypes* = CBTypesInfo.unsafe_from(floatsData)
   floatSeqsData = [FloatSeqType]
-  FloatSeqTypes* = CBTypesInfo.make(floatSeqsData)
+  FloatSeqTypes* = CBTypesInfo.unsafe_from(floatSeqsData)
+
+  IntType* = CBType.Int.info()
+  intsData = [IntType]
+  IntSeqType* = CBType.Seq.info(seqTypes = intsData)
+  IntTypes* = CBTypesInfo.unsafe_from(intsData)
+  intSeqsData = [IntSeqType]
+  IntSeqTypes* = CBTypesInfo.unsafe_from(intSeqsData)
   
 # Block interface/default
   
@@ -433,7 +479,7 @@ proc requiredVariables*(b: auto): ptr seq[CBExposedTypeInfo] =
   const msg = typedesc[type(b)].name & " is using default requiredVariables proc"
   {.hint: msg.}
   nil
-proc parameters*(b: auto): ptr seq[CBParameterInfo] =
+proc parameters*(b: auto): CBParametersInfo =
   const msg = typedesc[type(b)].name & " is using default parameters proc"
   {.hint: msg.}
   nil
@@ -443,6 +489,9 @@ proc setParam*(b: auto; index: int; val: CBVar) =
 proc getParam*(b: auto; index: int): CBVar =
   zeroMem(addr result, sizeof(CBVar))
   const msg = typedesc[type(b)].name & " is using default getParam proc"
+  {.hint: msg.}
+proc warmup*(b: auto; context: CBContext) =
+  const msg = typedesc[type(b)].name & " is using default warmup proc"
   {.hint: msg.}
 proc cleanup*(b: auto) =
   const msg = typedesc[type(b)].name & " is using default cleanup proc"
@@ -491,7 +540,8 @@ macro chainblock*(blk: untyped; blockName: string; namespaceStr: string = ""; te
     getParamProc = ident($blk & "_getParam")
     
     inferTypesProc = ident($blk & "_inferTypes")
-    
+
+    warmupProc = ident($blk & "_warmup")
     activateProc = ident($blk & "_activate")
     cleanupProc = ident($blk & "_cleanup")
   
@@ -534,15 +584,13 @@ macro chainblock*(blk: untyped; blockName: string; namespaceStr: string = ""; te
         result.elements = cast[ptr UncheckedArray[CBExposedTypeInfo]](addr info[][0])
         result.len = info[].len.uint32
     proc `parametersProc`*(b: `rtName`): CBParametersInfo {.cdecl.} =
-      result = CBParametersInfo(elements: nil, len: 0, cap: 0)
-      var info = b.sb.parameters()
-      if info != nil:
-        result.elements = cast[ptr UncheckedArray[CBParameterInfo]](addr info[][0])
-        result.len = info[].len.uint32
+      b.sb.parameters()
     proc `setParamProc`*(b: `rtName`; index: int; val: CBVar) {.cdecl.} =
       b.sb.setParam(index, val)
     proc `getParamProc`*(b: `rtName`; index: int): CBVar {.cdecl.} =
       b.sb.getParam(index)
+    proc `warmupProc`*(b: `rtName`; context: CBContext): CBVar {.cdecl.} =
+      b.sb.warmup(context)
     proc `activateProc`*(b: `rtName`; context: CBContext; input: CBVar): CBVar {.cdecl.} =
       try:
         b.sb.activate(context, input)
@@ -591,21 +639,20 @@ when isMainModule or defined(test_block):
   var v: CBVar
   echo v
 
-  # we need to leak those or NimMain will wipe them out
-  var anyInfo: ptr seq[CBTypeInfo] = cast[ptr seq[CBTypeInfo]](alloc0(sizeof(seq[CBTypeInfo])))
-  anyInfo[] =  @[CBTypeInfo(basicType: CBType.Any)]
-  var sinfo: ptr seq[CBParameterInfo] = cast[ptr seq[CBParameterInfo]](alloc0(sizeof(seq[CBParameterInfo])))
-  sinfo[] = @[CBParameterInfo(name: "P1")]
-
-  let info1 = CBType.Object.info()
+  let
+    info1 = CBType.Object.info()
+    p1 = CBParameterInfo.info("P1", AnyTypes)
+    pmsa = [p1]
+    pms = CBParametersInfo.unsafeFrom(pmsa)
 
   let
     sinkCC = "sink".toFourCC.uint32
     sharedNetworkInfo = CBType.Object.info(vendorId = sinkCC)
+    intVar = 10.intoCBVar
 
   proc inputTypes*(b: var CBPow2Block): CBTypesInfo = AnyTypes
   proc outputTypes*(b: var CBPow2Block): CBTypesInfo = AnyTypes
-  proc parameters*(b: var CBPow2Block): ptr seq[CBParameterInfo] = sinfo
+  proc parameters*(b: var CBPow2Block): CBParametersInfo = pms
   proc setParam*(b: var CBPow2Block; index: int; val: CBVar) = b.params[0] = val
   proc getParam*(b: var CBPow2Block; index: int): CBVar = b.params[0]
   proc activate*(b: var CBPow2Block; context: CBContext; input: CBVar): CBVar =
