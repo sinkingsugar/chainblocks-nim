@@ -103,9 +103,9 @@ type
     `object`*: ObjectInfo
 
   CBTypesInfo* {.importcpp: "CBTypesInfo", header: "chainblocks.hpp".} = object
-    elements: ptr UncheckedArray[CBTypeInfo]
-    len: uint32
-    cap: uint32
+    elements*: ptr UncheckedArray[CBTypeInfo]
+    len*: uint32
+    cap*: uint32
 
   CBObjectInfo* {.importcpp: "CBObjectInfo", header: "chainblocks.hpp".} = object
     name*: cstring
@@ -116,9 +116,9 @@ type
     help*: cstring
   
   CBParametersInfo* {.importcpp: "CBParametersInfo", header: "chainblocks.hpp".} = object
-    elements: ptr UncheckedArray[CBParameterInfo]
-    len: uint32
-    cap: uint32
+    elements*: ptr UncheckedArray[CBParameterInfo]
+    len*: uint32
+    cap*: uint32
 
   CBExposedTypeInfo* {.importcpp: "CBExposedTypeInfo", header: "chainblocks.hpp".} = object
     name*: cstring
@@ -126,9 +126,9 @@ type
     exposedType*: CBTypeInfo
 
   CBExposedTypesInfo* {.importcpp: "CBExposedTypesInfo", header: "chainblocks.hpp".} = object
-    elements: ptr UncheckedArray[CBExposedTypeInfo]
-    len: uint32
-    cap: uint32
+    elements*: ptr UncheckedArray[CBExposedTypeInfo]
+    len*: uint32
+    cap*: uint32
 
   CBValidationResult* {.importcpp: "CBValidationResult", header: "chainblocks.hpp".} = object
     outputType*: CBTypeInfo
@@ -192,7 +192,7 @@ type
   CBSetParamProc* {.importcpp: "CBSetParamProc", header: "chainblocks.hpp".} = proc(b: ptr CBlock; index: int; val: CBVar) {.cdecl.}
   CBGetParamProc* {.importcpp: "CBGetParamProc", header: "chainblocks.hpp".} = proc(b: ptr CBlock; index: int): CBVar {.cdecl.}
 
-  CBInferTypesProc*{.importcpp: "CBInferTypesProc", header: "chainblocks.hpp".}  = proc(b: ptr CBlock; inputType: CBTypeInfo; consumables: CBExposedTypesInfo): CBTypeInfo {.cdecl.}
+  CBComposeProc*{.importcpp: "CBComposeProc", header: "chainblocks.hpp".} = proc(b: ptr CBlock; data: CBInstanceData): CBTypeInfo {.cdecl.}
 
   CBWarmupProc* {.importcpp: "CBWarmupProc", header: "chainblocks.hpp".} = proc(b: ptr CBlock; context: CBContext) {.cdecl.}
   CBActivateProc* {.importcpp: "CBActivateProc", header: "chainblocks.hpp".} = proc(b: ptr CBlock; context: CBContext; input: CBVar): CBVar {.cdecl.}
@@ -220,7 +220,7 @@ type
     setParam*: CBSetParamProc
     getParam*: CBGetParamProc
 
-    inferTypes*: CBInferTypesProc
+    compose*: CBComposeProc
 
     warmup*: CBWarmupProc
     activate*: CBActivateProc
@@ -234,28 +234,39 @@ type
 
   CBCallback* {.importcpp: "CBCallback", header: "chainblocks.hpp".} = proc(): void {.cdecl.}
 
-  CBSeqLike* = CBSeq | CBTypesInfo | CBParametersInfo | CBStrings | CBExposedTypesInfo | CBlocks
-  CBIntVectorsLike* = CBInt2 | CBInt3 | CBInt4 | CBInt8 | CBInt16
-  CBFloatVectorsLike* = CBFloat2 | CBFloat3 | CBFloat4
+  CBInstanceData* {.importcpp: "CBInstanceData", header: "chainblocks.hpp".} = object
+    self {.importcpp: "block"}: ptr CBlock
+    inputType*: CBTypeInfo
+    stack*: CBTypesInfo
+    shared*: CBExposedTypesInfo
 
-# when appType != "lib" or defined(forceCBRuntime):
-#   proc `~quickcopy`*(clonedVar: var CBVar): int {.importcpp: "chainblocks::destroyVar(#)", header: "runtime.hpp", discardable.}
-#   proc quickcopy*(dst: var CBVar; src: var CBvar): int {.importcpp: "chainblocks::cloneVar(#, #)", header: "runtime.hpp", discardable.}
-# else:
-#   # they exist in chainblocks.nim
-#   proc `~quickcopy`*(clonedVar: var CBVar): int {.importc: "cbDestroyVar", cdecl, discardable.}
-#   proc quickcopy*(dst: var CBVar; src: var CBvar): int {.importc: "cbCloneVar", cdecl, discardable.}
+  TCBArrays = CBSeq | CBStrings | CBlocks | CBTypesInfo | CBExposedTypesInfo | CBParametersInfo
 
-# proc `=destroy`*(v: var CBVarConst) {.inline.} = discard `~quickcopy` v.value
+iterator items*(arr: TCBArrays): auto {.inline.} =
+  for i in 0..<arr.len:
+    yield arr.elements[i]
 
-var AllIntTypes* = { Int, Int2, Int3, Int4, Int8, Int16 }
-var AllFloatTypes* = { Float, Float2, Float3, Float4 }
+iterator mitems*(arr: var TCBArrays): var auto {.inline.} =
+  for i in 0..<arr.len:
+    yield arr.elements[i]
+
+proc `[]`*(v: TCBArrays; index: int): auto {.inline, noinit.} =
+  assert index < v.len.int
+  v.elements[index]
+
+proc `[]=`*(v: var TCBArrays; index: int; value: auto) {.inline.} =
+  assert index < v.len.int
+  v.elements = value
 
 proc suspendInternal(context: CBContext; seconds: float64): CBVar {.importcpp: "chainblocks::suspend(#, #)", header: "runtime.hpp".}
 proc suspend*(context: CBContext; seconds: float64): CBVar {.inline.} =
   var frame = getFrameState()
   result = suspendInternal(context, seconds)
   setFrameState(frame)
+
+proc referenceVariable*(context: CBContext; name: cstring): ptr CBVar {.importcpp: "chainblocks::referenceVariable(#, #)", header: "runtime.hpp".}
+proc reference*(name: cstring; context: CBContext): ptr CBVar {.inline.} = referenceVariable(context, name)
+proc release*(v: ptr CBVar) {.importcpp: "chainblocks::releaseVariable(#)", header: "runtime.hpp".}
 
 template chainState*(v: CBVar): auto = v.payload.chainState
 template objectValue*(v: CBVar): auto = v.payload.objectValue
@@ -342,18 +353,6 @@ template `enumValue=`*(v: CBVar, val: auto) = v.payload.enumValue = val
 template `enumVendorId=`*(v: CBVar, val: auto) = v.payload.enumVendorId = val
 template `enumTypeId=`*(v: CBVar, val: auto) = v.payload.enumTypeId = val
   
-# registerCppType CBChain
-# registerCppType CBNode
-# registerCppType CBContextObj
-# registerCppType CBInt2
-# registerCppType CBInt3
-# registerCppType CBInt4
-# registerCppType CBInt8
-# registerCppType CBInt16
-# registerCppType CBFloat2
-# registerCppType CBFloat3
-# registerCppType CBFloat4
-
 type SupportedTypes = SomeOrdinal | seq[CBVar]
 
 proc intoCBVar*[T](value: T): CBVar =
@@ -490,9 +489,6 @@ proc getParam*(b: auto; index: int): CBVar =
   zeroMem(addr result, sizeof(CBVar))
   const msg = typedesc[type(b)].name & " is using default getParam proc"
   {.hint: msg.}
-proc warmup*(b: auto; context: CBContext) =
-  const msg = typedesc[type(b)].name & " is using default warmup proc"
-  {.hint: msg.}
 proc cleanup*(b: auto) =
   const msg = typedesc[type(b)].name & " is using default cleanup proc"
   {.hint: msg.}
@@ -507,6 +503,8 @@ template cppnew*(pt, typ1, typ2, a1: untyped): untyped = emitc(`pt`, " = reinter
 template cppnew*(pt, typ1, typ2, a1, a2: untyped): untyped = emitc(`pt`, " = reinterpret_cast<", `typ1`, "*>(new ", `typ2`, "(", `a1`, ", ", `a2`, "));")
 template cppnew*(pt, typ1, typ2, a1, a2, a3: untyped): untyped = emitc(`pt`, " = reinterpret_cast<", `typ1`, "*>(new ", `typ2`, "(", `a1`, ", ", `a2`, ", ", `a3`, "));")
 template cppdel*(pt: untyped): untyped = emitc("delete ", `pt`, ";")
+proc throwCBException*(msg: string) = emitc("throw chainblocks::CBException(", `msg`.cstring, ");")
+proc throwCBException*(msg: cstring) = emitc("throw chainblocks::CBException(", `msg`, ");")
 
 proc registerBlock*(name: cstring; initProc: CBBlockConstructor) {.importcpp: "chainblocks::registerBlock(@)", header: "runtime.hpp".}
 
@@ -539,7 +537,7 @@ macro chainblock*(blk: untyped; blockName: string; namespaceStr: string = ""; te
     setParamProc = ident($blk & "_setParam")
     getParamProc = ident($blk & "_getParam")
     
-    inferTypesProc = ident($blk & "_inferTypes")
+    composeProc = ident($blk & "_compose")
 
     warmupProc = ident($blk & "_warmup")
     activateProc = ident($blk & "_activate")
@@ -583,20 +581,27 @@ macro chainblock*(blk: untyped; blockName: string; namespaceStr: string = ""; te
       if info != nil:
         result.elements = cast[ptr UncheckedArray[CBExposedTypeInfo]](addr info[][0])
         result.len = info[].len.uint32
+    when compiles((var x: `blk`; discard x.compose(CBInstanceData()))):
+      proc `composeProc`*(b: `rtName`; data: CBInstanceData): CBTypeInfo =
+        const msg =  `namespace` & `blockName` & " has compose proc!"
+        {.hint: msg.}
+        b.sb.compose(data)
     proc `parametersProc`*(b: `rtName`): CBParametersInfo {.cdecl.} =
       b.sb.parameters()
     proc `setParamProc`*(b: `rtName`; index: int; val: CBVar) {.cdecl.} =
       b.sb.setParam(index, val)
     proc `getParamProc`*(b: `rtName`; index: int): CBVar {.cdecl.} =
       b.sb.getParam(index)
-    proc `warmupProc`*(b: `rtName`; context: CBContext): CBVar {.cdecl.} =
-      b.sb.warmup(context)
+    when compiles((var x: `blk`; x.warmup(nil))):
+      proc `warmupProc`*(b: `rtName`; context: CBContext) {.cdecl.} =
+        const msg =  `namespace` & `blockName` & " has warmup proc!"
+        {.hint: msg.}
+        b.sb.warmup(context)
     proc `activateProc`*(b: `rtName`; context: CBContext; input: CBVar): CBVar {.cdecl.} =
       try:
-        b.sb.activate(context, input)
+        result = b.sb.activate(context, input)
       except:
-        echo getCurrentExceptionMsg()
-        raise
+        throwCBException getCurrentExceptionMsg()
     proc `cleanupProc`*(b: `rtName`) {.cdecl.} =
       b.sb.cleanup()
     
@@ -617,10 +622,10 @@ macro chainblock*(blk: untyped; blockName: string; namespaceStr: string = ""; te
       result.parameters = cast[CBParametersProc](`parametersProc`.pointer)
       result.setParam = cast[CBSetParamProc](`setParamProc`.pointer)
       result.getParam = cast[CBGetParamProc](`getParamProc`.pointer)
-      
-      when compiles((var x: `blk`; discard x.inferTypes(CBTypeInfo(), nil))):
-        result.inferTypes = cast[CBInferTypesProc](`inferTypesProc`.pointer)
-      
+      when compiles((var x: `blk`; discard x.compose(CBInstanceData()))):
+        result.compose = cast[CBComposeProc](`composeProc`.pointer)
+      when compiles((var x: `blk`; x.warmup(nil))):
+        result.warmup = cast[CBWarmupProc](`warmupProc`.pointer)
       result.activate = cast[CBActivateProc](`activateProc`.pointer)
       result.cleanup = cast[CBCleanupProc](`cleanupProc`.pointer)
 
@@ -649,10 +654,14 @@ when isMainModule or defined(test_block):
     sinkCC = "sink".toFourCC.uint32
     sharedNetworkInfo = CBType.Object.info(vendorId = sinkCC)
     intVar = 10.intoCBVar
+  var
+    idata: CBInstanceData
+  idata.self = nil
 
   proc inputTypes*(b: var CBPow2Block): CBTypesInfo = AnyTypes
   proc outputTypes*(b: var CBPow2Block): CBTypesInfo = AnyTypes
   proc parameters*(b: var CBPow2Block): CBParametersInfo = pms
+  proc compose*(b: var CBPow2Block; data: CBInstanceData): CBTypeInfo = AnyType
   proc setParam*(b: var CBPow2Block; index: int; val: CBVar) = b.params[0] = val
   proc getParam*(b: var CBPow2Block; index: int): CBVar = b.params[0]
   proc activate*(b: var CBPow2Block; context: CBContext; input: CBVar): CBVar =
@@ -661,97 +670,3 @@ when isMainModule or defined(test_block):
   
   chainblock CBPow2Block, "Pow2StaticBlock"
   
-# var
-#   Empty* = CBVar(valueType: None, payload: CBVarPayload(chainState: Continue))
-#   RestartChain* = CBVar(valueType: None, payload: CBVarPayload(chainState: Restart))
-#   StopChain* = CBVar(valueType: None, payload: CBVarPayload(chainState: Stop))
-
-# # Vectors
-# proc `[]`*(v: CBIntVectorsLike; index: int): int64 {.inline, noinit.} = v.toCpp[index].to(int64)
-# proc `[]=`*(v: var CBIntVectorsLike; index: int; value: int64) {.inline.} = v.toCpp[index] = value
-# proc `[]`*(v: CBFloatVectorsLike; index: int): float64 {.inline, noinit.} = v.toCpp[index].to(float64)
-# proc `[]=`*(v: var CBFloatVectorsLike; index: int; value: float64) {.inline.} = v.toCpp[index] = value
-
-# # CBTable
-# proc initTable*(t: var CBTable) {.inline.} =
-#   t = nil
-#   invokeFunction("stbds_shdefault", t, Empty).to(void)
-# proc freeTable*(t: var CBTable) {.inline.} = invokeFunction("stbds_shfree", t).to(void)
-# proc len*(t: CBTable): int {.inline.} = invokeFunction("stbds_shlen", t).to(int)
-# iterator mitems*(t: CBTable): var CBNamedVar {.inline.} =
-#   for i in 0..<t.len:
-#     yield t[i]
-# proc incl*(t: var CBTable; pair: CBNamedVar) {.inline.} = invokeFunction("stbds_shputs", t, pair).to(void)
-# proc incl*(t: var CBTable; k: cstring; v: CBVar) {.inline.} = invokeFunction("stbds_shput", t, k, v).to(void)
-# proc excl*(t: CBTable; key: cstring) {.inline.} = invokeFunction("stbds_shdel", t, key).to(void)
-# proc find*(t: CBTable; key: cstring): int {.inline.} = invokeFunction("stbds_shgeti", t, key).to(int)
-# converter toCBVar*(t: CBTable): CBVar {.inline.} = CBVar(valueType: Table, payload: CBVarPayload(tableValue: t))
-
-# # CBSeqLikes
-# proc initSeq*(s: var CBSeqLike) {.inline.} = s = nil
-# proc freeSeq*(cbs: var CBSeqLike) {.inline.} = invokeFunction("stbds_arrfree", cbs).to(void)
-# proc freeSeq*(cbs: var CBSeq) {.inline.} = invokeFunction("stbds_arrfree", cbs).to(void)
-# proc len*(s: CBSeqLike): int {.inline.} = invokeFunction("stbds_arrlen", s).to(int)
-# iterator mitems*(s: CBSeq): var CBVar {.inline.} =
-#   for i in 0..<s.len:
-#     yield s[i]
-# iterator mitems*(s: CBTypesInfo): var CBTypeInfo {.inline.} =
-#   for i in 0..<s.len:
-#     yield s[i]
-# iterator mitems*(s: CBParametersInfo): var CBParameterInfo {.inline.} =
-#   for i in 0..<s.len:
-#     yield s[i]
-# iterator mitems*(s: CBStrings): var CBString {.inline.} =
-#   for i in 0..<s.len:
-#     yield s[i]
-# iterator mitems*(s: CBExposedTypesInfo): var CBExposedTypeInfo {.inline.} =
-#   for i in 0..<s.len:
-#     yield s[i]
-# proc push*[T](cbs: var CBSeqLike, val: T) {.inline.} = invokeFunction("stbds_arrpush", cbs, val).to(void)
-# proc push*(cbs: var CBExposedTypesInfo, val: CBExposedTypeInfo) {.inline.} = invokeFunction("stbds_arrpush", cbs, val).to(void)
-# proc push*(cbs: var CBSeq, val: CBVar) {.inline.} = invokeFunction("stbds_arrpush", cbs, val).to(void)
-# proc pop*(cbs: var CBSeq): CBVar {.inline.} = invokeFunction("stbds_arrpop", cbs).to(CBVar)
-# proc clear*(cbs: var CBSeqLike) {.inline.} = invokeFunction("stbds_arrsetlen", cbs, 0).to(void)
-# proc clear*(cbs: var CBSeq) {.inline.} = invokeFunction("stbds_arrsetlen", cbs, 0).to(void)
-# proc setLen*(cbs: var CBSeq; newLen: int) {.inline.} = invokeFunction("stbds_arrsetlen", cbs, newLen).to(void)
-# iterator items*(s: CBParametersInfo): CBParameterInfo {.inline.} =
-#   for i in 0..<s.len:
-#     yield s[i]
-# iterator items*(s: CBSeq): CBVar {.inline.} =
-#   for i in 0..<s.len:
-#     yield s[i]
-# iterator items*(s: CBStrings): CBString {.inline.} =
-#   for i in 0..<s.len:
-#     yield s[i]
-# proc `~@`*[IDX, CBVar](a: array[IDX, CBVar]): CBSeq =
-#   initSeq(result)
-#   for v in a:
-#     result.push v
-
-# # Strings
-# proc toCBStrings*(strings: var StbSeq[cstring]): CBStrings {.inline.} =
-#   # strings must be kept alive!
-#   initSeq(result)
-#   for str in strings.mitems:
-#     result.push(str)
-
-# proc `$`*(s: CBString): string {.inline.} = $cast[cstring](s)
-# converter toString*(s: CBString): string {.inline.} = $s.cstring
-# converter toString*(s: string): CBString {.inline.} = s.cstring.CBString
-# converter toStringVar*(s: string): CBVar {.inline.} =
-#   result.valueType = String
-#   result.payload.stringValue = s.cstring.CBString
-
-# converter toCBVar*(s: GbString): CBVar {.inline.} =
-#   result.valueType = String
-#   result.payload.stringValue = s.cstring.CBString
-
-# converter toCBString*(s: GbString): CBString {.inline.} = s.cstring.CBString
-# converter toGbString*(s: CBString): GbString {.inline.} = s.cstring.GbString
-
-# # Allocators using cpp to properly construct in C++ fashion (we have some blocks that need this)
-# template cppnew*(pt, typ1, typ2: untyped): untyped = emitc(`pt`, " = reinterpret_cast<", `typ1`, "*>(new ", `typ2`, "());")
-# template cppnew*(pt, typ1, typ2, a1: untyped): untyped = emitc(`pt`, " = reinterpret_cast<", `typ1`, "*>(new ", `typ2`, "(", `a1`, "));")
-# template cppnew*(pt, typ1, typ2, a1, a2: untyped): untyped = emitc(`pt`, " = reinterpret_cast<", `typ1`, "*>(new ", `typ2`, "(", `a1`, ", ", `a2`, "));")
-# template cppnew*(pt, typ1, typ2, a1, a2, a3: untyped): untyped = emitc(`pt`, " = reinterpret_cast<", `typ1`, "*>(new ", `typ2`, "(", `a1`, ", ", `a2`, ", ", `a3`, "));")
-# template cppdel*(pt: untyped): untyped = emitc("delete ", `pt`, ";")
