@@ -142,8 +142,8 @@ type
   CBVarPayload* {.importcpp: "CBVarPayload", header: "chainblocks.hpp".} = object
     chainState*: CBChainState
     objectValue*: CBPointer
-    objectVendorId*: int32
-    objectTypeId*: int32
+    objectVendorId*: uint32
+    objectTypeId*: uint32
     boolValue*: bool
     intValue*: CBInt
     int2Value*: CBInt2
@@ -353,15 +353,20 @@ template `enumValue=`*(v: CBVar, val: auto) = v.payload.enumValue = val
 template `enumVendorId=`*(v: CBVar, val: auto) = v.payload.enumVendorId = val
 template `enumTypeId=`*(v: CBVar, val: auto) = v.payload.enumTypeId = val
   
-type SupportedTypes = SomeOrdinal | seq[CBVar]
+type SupportedTypes = seq[CBVar] | SomeFloat | SomeInteger
 
 proc intoCBVar*[T](value: T): CBVar =
   zeroMem(addr result, sizeof(CBVar))
 
-  when T is SomeOrdinal:
+  when T is SomeInteger:
     result.valueType = CBType.Int
     assert T.high <= int64.high
     result.intValue = value.int64
+
+  when T is SomeFloat:
+    result.valueType = CBType.Float
+    assert T.high <= float64.high
+    result.floatValue = value.float64
 
   when T is seq[CBVar]:
     result.valueType = CBType.Seq
