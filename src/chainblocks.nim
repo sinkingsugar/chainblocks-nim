@@ -61,36 +61,33 @@ type
     data*: ptr UncheckedArray[uint8]
 
   CBType* {.importcpp: "CBType", header: "chainblocks.hpp", size: sizeof(uint8).} = enum
-      None,
-      Any,
-      Object,
-      Enum,
-      Bool,
-      Int,        # A 64bits int
-      Int2,       # A vector of 2 64bits ints
-      Int3,       # A vector of 3 32bits ints
-      Int4,       # A vector of 4 32bits ints
-      Int8,       # A vector of 8 16bits ints
-      Int16,      # A vector of 16 8bits ints
-      Float,      # A 64bits float
-      Float2,     # A vector of 2 64bits floats
-      Float3,     # A vector of 3 32bits floats
-      Float4,     # A vector of 4 32bits floats
-      Color,      # A vector of 4 uint8
-      Chain,      # sub chains, e.g. IF/ELSE
-      Block,      # a block, useful for future introspection blocks!
-      StackIndex, # an index in the stack, used as cheap ContextVar
-      
-      EndOfBlittableTypes = 50, # anything below this is not blittable (not exactly
-                                # but for cloneVar mostly)
-      
-      Bytes, # pointer + size
-      String,
-      Path,       # An OS filesystem path
-      ContextVar, # A string label to find from CBContext variables
-      Image,
-      Seq,
-      Table,
+    None,
+    Any,
+    Object,
+    Enum,
+    Bool,
+    Int,        # A 64bits int
+    Int2,       # A vector of 2 64bits ints
+    Int3,       # A vector of 3 32bits ints
+    Int4,       # A vector of 4 32bits ints
+    Int8,       # A vector of 8 16bits ints
+    Int16,      # A vector of 16 8bits ints
+    Float,      # A 64bits float
+    Float2,     # A vector of 2 64bits floats
+    Float3,     # A vector of 3 32bits floats
+    Float4,     # A vector of 4 32bits floats
+    Color,      # A vector of 4 uint8
+    Chain,      # sub chains, e.g. IF/ELSE
+    Block,      # a block, useful for future introspection blocks!
+    StackIndex, # an index in the stack, used as cheap ContextV
+    EndOfBlittableTypes = 50, # anything below this is not considerd blittable
+    Bytes, # pointer + size
+    String,
+    Path,       # An OS filesystem path
+    ContextVar, # A string label to find from CBContext variables
+    Image,
+    Seq,
+    Table,
 
   # exportc to avoid mangling
   ObjectInfo* {.exportc.} = object
@@ -198,6 +195,8 @@ type
   CBActivateProc* {.importcpp: "CBActivateProc", header: "chainblocks.hpp".} = proc(b: ptr CBlock; context: CBContext; input: CBVar): CBVar {.cdecl.}
   CBCleanupProc* {.importcpp: "CBCleanupProc", header: "chainblocks.hpp".} = proc(b: ptr CBlock) {.cdecl.}
 
+  CBMutateProc* {.importcpp: "CBMutateProc", header: "chainblocks.hpp".} = proc(b: ptr CBlock; options: CBTable) {.cdecl.}
+
   CBlock* {.importcpp: "CBlock", header: "chainblocks.hpp".} = object
     inlineBlockId*: uint8
     
@@ -226,11 +225,14 @@ type
     activate*: CBActivateProc
     cleanup*: CBCleanupProc
 
+    mutate*: CBMutateProc
+
   CBBlockConstructor* {.importcpp: "CBBlockConstructor", header: "chainblocks.hpp".} = proc(): ptr CBlock {.cdecl.}
+ 
   CBlocks* {.importcpp: "CBlocks", header: "chainblocks.hpp".} = object
-    elements: ptr UncheckedArray[CBlock]
-    len: uint32
-    cap: uint32
+    elements*: ptr UncheckedArray[CBlock]
+    len*: uint32
+    cap*: uint32
 
   CBCallback* {.importcpp: "CBCallback", header: "chainblocks.hpp".} = proc(): void {.cdecl.}
 
@@ -393,22 +395,19 @@ proc info*(t: static[CBType],
             typeId: uint32 = 0,
            seqTypes: openarray[CBTypeInfo] = []): CBTypeInfo =
   zeroMem(addr result, sizeof(CBTypeInfo))
-  when t == CBType.Any:
-    result = CBTypeInfo(basicType: CBType.Any)
-  when t == CBType.Float:
-    result = CBTypeInfo(basicType: CBType.Float)
-  when t == CBType.Int:
-    result = CBTypeInfo(basicType: CBType.Int)
   when t == CBType.Seq:
-    result = CBTypeInfo(basicType: CBType.Seq,
-                        seqTypes: CBTypesInfo(
-                          elements: cast[ptr UncheckedArray[CBTypeInfo]](unsafeaddr seqTypes[0]),
-                          len: seqTypes.len.uint32,
-                          cap: 0))
+    if seqTypes.len > 0:
+      result = CBTypeInfo(basicType: CBType.Seq,
+                          seqTypes: CBTypesInfo(
+                            elements: cast[ptr UncheckedArray[CBTypeInfo]](unsafeaddr seqTypes[0]),
+                            len: seqTypes.len.uint32,
+                            cap: 0))
+    else:
+      result = CBTypeInfo(basicType: CBType.Seq)
   when t == CBType.Object:
     result = CBTypeInfo(basicType: CBType.Object, `object`: ObjectInfo(vendorId: vendorId, typeId: typeId)) 
   else:
-    discard
+    result = CBTypeInfo(basicType: t)
 
 proc unsafeFrom*(_: type[CBTypesInfo]; infos: openarray[CBTypeInfo]): CBTypesInfo =
   zeroMem(addr result, sizeof(CBTypesInfo))
@@ -446,29 +445,48 @@ proc unsafeFrom*(_: type[CBExposedTypesInfo]; infos: openarray[CBExposedTypeInfo
   result.len = infos.len.uint32
   result.cap = 0
 
+macro generateCBTypeInfos(t: CBType): untyped =
+  var
+    xType = ident($t & "Type")
+    xData = ident($t & "Data")
+    xSeqType = ident($t & "SeqType")
+    xTypes = ident($t & "Types")
+    xSeqData = ident($t & "SeqData")
+    xSeqTypes = ident($t & "SeqTypes")
+  result = quote do:
+    let
+      `xType`* = `t`.info()
+      `xData` = [`xType`]
+      `xSeqType`* = CBType.Seq.info(seqTypes = `xData`)
+      `xTypes`* = CBTypesInfo.unsafe_from(`xData`)
+      `xSeqData` = [`xSeqType`]
+      `xSeqTypes`* = CBTypesInfo.unsafe_from(`xSeqData`)
+
 let
   NoneType* = CBType.None.info()
   
-  AnyType* = CBType.Any.info()
-  anysData = [AnyType]
-  AnySeqType* = CBType.Seq.info(seqTypes = anysData)
-  AnyTypes* = CBTypesInfo.unsafe_from(anysData)
-  anySeqsData = [AnySeqType]
-  AnySeqTypes* = CBTypesInfo.unsafe_from(anySeqsData)
-
-  FloatType* = CBType.Float.info()
-  floatsData = [FloatType]
-  FloatSeqType* = CBType.Seq.info(seqTypes = floatsData)
-  FloatTypes* = CBTypesInfo.unsafe_from(floatsData)
-  floatSeqsData = [FloatSeqType]
-  FloatSeqTypes* = CBTypesInfo.unsafe_from(floatSeqsData)
-
-  IntType* = CBType.Int.info()
-  intsData = [IntType]
-  IntSeqType* = CBType.Seq.info(seqTypes = intsData)
-  IntTypes* = CBTypesInfo.unsafe_from(intsData)
-  intSeqsData = [IntSeqType]
-  IntSeqTypes* = CBTypesInfo.unsafe_from(intSeqsData)
+generateCBTypeInfos Any
+generateCBTypeInfos Bool
+generateCBTypeInfos Int
+generateCBTypeInfos Int2
+generateCBTypeInfos Int3
+generateCBTypeInfos Int4
+generateCBTypeInfos Int8
+generateCBTypeInfos Int16
+generateCBTypeInfos Float
+generateCBTypeInfos Float2
+generateCBTypeInfos Float3
+generateCBTypeInfos Float4
+generateCBTypeInfos Color
+generateCBTypeInfos Chain
+generateCBTypeInfos Block
+generateCBTypeInfos Bytes
+generateCBTypeInfos String
+generateCBTypeInfos Path
+generateCBTypeInfos ContextVar
+generateCBTypeInfos Image
+generateCBTypeInfos Seq
+generateCBTypeInfos Table
   
 # Block interface/default
   
@@ -565,6 +583,8 @@ macro chainblock*(blk: untyped; blockName: string; namespaceStr: string = ""; te
     warmupProc = ident($blk & "_warmup")
     activateProc = ident($blk & "_activate")
     cleanupProc = ident($blk & "_cleanup")
+
+    mutateProc = ident($blk & "_mutate")
   
   result = quote do:
     # import macros # used!
@@ -576,10 +596,15 @@ macro chainblock*(blk: untyped; blockName: string; namespaceStr: string = ""; te
       
       `rtName`* = ptr `rtNameValue`
     
-    template name*(b: `blk`): string =
-      (`namespace` & `blockName`)
-    proc `nameProc`*(b: `rtName`): cstring {.cdecl.} =
-      (`namespace` & `blockName`)
+
+    when compiles((var x: `blk`; discard x.name())):
+      proc `nameProc`*(b: `rtName`): cstring {.cdecl.} =
+        b.sb.name()
+    else:
+      proc name*(b: `blk`): cstring =
+        (`namespace` & `blockName`)
+      proc `nameProc`*(b: `rtName`): cstring {.cdecl.} =
+        (`namespace` & `blockName`)
     proc `helpProc`*(b: `rtName`): cstring {.cdecl.} =
       b.sb.help()
     proc `setupProc`*(b: `rtName`) {.cdecl.} =
@@ -619,6 +644,11 @@ macro chainblock*(blk: untyped; blockName: string; namespaceStr: string = ""; te
         throwCBException getCurrentExceptionMsg()
     proc `cleanupProc`*(b: `rtName`) {.cdecl.} =
       b.sb.cleanup()
+    when compiles((var x: `blk`; x.mutate(CBTable()))):
+      proc `mutateProc`*(b: `rtName`; options: CBTable) {.cdecl.} =
+        const msg =  `namespace` & `blockName` & " has mutate proc!"
+        {.hint: msg.}
+        b.sb.mutate(options)
     
     registerBlock(`namespace` & `blockName`) do -> ptr CBlock {.cdecl.}:
       # https://stackoverflow.com/questions/7546620/operator-new-initializes-memory-to-zero
