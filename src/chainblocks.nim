@@ -1,5 +1,5 @@
 import nimline
-import os, macros, typetraits
+import os, macros, typetraits, tables
 
 const
   modulePath = currentSourcePath().splitPath().head
@@ -12,7 +12,8 @@ cppincludes(modulePath & "/../../chainblocks/deps/magic_enum/include")
 
 type
   FourCC* = distinct int32
-  
+
+  CBBool* {.importcpp: "CBBool", header: "chainblocks.hpp", nodecl.} = bool
   CBInt* {.importcpp: "CBInt", header: "chainblocks.hpp", nodecl.} = int64
   CBInt2* {.importcpp: "CBInt2", header: "chainblocks.hpp".} = object
   CBInt3* {.importcpp: "CBInt3", header: "chainblocks.hpp".} = object 
@@ -33,19 +34,15 @@ type
     cap*: uint32
   CBTable* {.importcpp: "CBTable", header: "chainblocks.hpp".} = object
     opaque: pointer
-    api: pointer # TODO
+    api: ptr CBTableInterface
   CBStrings* {.importcpp: "CBStrings", header: "chainblocks.hpp".} = object
     elements*: ptr UncheckedArray[CBString]
     len*: uint32
     cap*: uint32
   CBEnum* {.importcpp: "CBEnum", header: "chainblocks.hpp".} = distinct int32
-
-  
   CBChain* {.importcpp: "CBChain", header: "chainblocks.hpp".} = object
   CBChainPtr* = ptr CBChain
-
   CBNode* {.importcpp: "CBNode", header: "chainblocks.hpp".} = object
-
   CBContextObj* {.importcpp: "CBContext", header: "chainblocks.hpp".} = object
   CBContext* = ptr CBContextObj
 
@@ -59,6 +56,17 @@ type
     channels*: uint8
     flags*: uint8
     data*: ptr UncheckedArray[uint8]
+
+  CBTableForEachCallback {.importcpp: "CBTableForEachCallback", header: "chainblocks.hpp".} = proc(key: cstring; value: ptr CBVar; data: pointer): CBBool {.cdecl.}
+
+  CBTableInterface {.importcpp: "CBTableInterface", header: "chainblocks.hpp".} = object
+    tableForEach: proc(table: CBTable; cb: CBTableForEachCallback; data: pointer) {.cdecl.}
+    tableSize: proc(table: CBTable): csize_t {.cdecl.}
+    tableContains: proc(table: CBTable; key: cstring): CBBool {.cdecl.}
+    tableAt: proc(table: CBTable; key: cstring): ptr CBVar {.cdecl.}
+    tableRemove: proc(table: CBTable; key: cstring) {.cdecl.}
+    tableClear: proc(table: CBTable) {.cdecl.}
+    tableFree: proc(table: CBTable) {.cdecl.}
 
   CBType* {.importcpp: "CBType", header: "chainblocks.hpp", size: sizeof(uint8).} = enum
     None,
@@ -93,11 +101,16 @@ type
   ObjectInfo* {.exportc.} = object
     vendorId: uint32
     typeId: uint32
+
+  TableInfo* {.exportc.} = object
+    keys: CBStrings
+    types: CBTypesInfo
       
   CBTypeInfo* {.importcpp: "CBTypeInfo", header: "chainblocks.hpp".} = object
     basicType*: CBType
     seqTypes*: CBTypesInfo
     `object`*: ObjectInfo
+    table*: TableInfo
 
   CBTypesInfo* {.importcpp: "CBTypesInfo", header: "chainblocks.hpp".} = object
     elements*: ptr UncheckedArray[CBTypeInfo]
@@ -244,6 +257,56 @@ type
 
   TCBArrays = CBSeq | CBStrings | CBlocks | CBTypesInfo | CBExposedTypesInfo | CBParametersInfo
 
+  Var* = distinct CBVar
+
+proc cloneVar*(dst: var CBVar | var Var; src: CBVar | Var) {.importcpp: "chainblocks::cloneVar(#, #)", header: "runtime.hpp".}
+proc destroyVar*(dst: var CBVar | var Var){.importcpp: "chainblocks::destroyVar(#)", header: "runtime.hpp".}
+
+proc `=destroy`(v: var Var) {.inline.} =
+  v.destroyVar()
+
+proc `=`(dst: var Var; source: Var) {.inline.} =
+  zeroMem(addr dst, sizeof(CBVar))
+  dst.cloneVar(source)
+
+converter toVar*(v: CBVar): Var {.inline.} =
+  result.cloneVar(v)
+
+macro generateVarConverter(nimVal, cbType, cbVal: untyped): untyped =
+  let
+    toName = ident("convertToCB" & $cbType)
+    fromName = ident("convertFromCB" & $cbType)
+
+  return quote do:
+    converter `toName`*(v: var Var): `nimVal` {.inline.} =
+      when `nimVal` is SomeInteger:
+        assert `nimVal`.high <= int64.high
+
+      when `nimVal` is SomeFloat:
+        assert `nimVal`.high <= float64.high
+
+      assert v.CBVar.valueType == CBType.`cbType`
+      v.CBVar.payload.`cbVal`.`nimVal`
+
+    converter `fromName`*(v: int): Var {.inline.} =
+      type outputType = typeof(result.CBVar.payload.`cbVal`)
+      result.CBVar.valueType = CBType.`cbType`
+      result.CBVar.payload.`cbVal` = cast[outputType](v)
+
+generateVarConverter int, Int, intValue
+generateVarConverter float64, Float, floatValue
+generateVarConverter float32, Float, floatValue
+
+converter toString*(v: var Var): string =
+  assert v.CBVar.valueType == CBType.String
+  $(v.CBVar.payload.stringValue.cstring)
+
+converter fromString*(v: string): Var {.inline.} =
+  var tmp: CBVar
+  tmp.valueType = CBType.String
+  tmp.payload.stringValue = v.cstring.CBString
+  result.cloneVar(tmp)
+
 iterator items*(arr: TCBArrays): auto {.inline.} =
   for i in 0..<arr.len:
     yield arr.elements[i]
@@ -259,6 +322,15 @@ proc `[]`*(v: TCBArrays; index: int): auto {.inline, noinit.} =
 proc `[]=`*(v: var TCBArrays; index: int; value: auto) {.inline.} =
   assert index < v.len.int
   v.elements = value
+
+proc toTable*(v: CBVar): Table[string, Var] =
+  assert v.valueType == CBType.Table
+  result = initTable[string, Var]()
+  proc cb(key: cstring; value: ptr CBVar; data: pointer): CBBool {.cdecl.} =
+    var res = cast[ptr Table[string, Var]](data)
+    res[][$key] = value[]
+    true
+  v.payload.tableValue.api[].tableForEach(v.payload.tableValue, cb, addr result)
 
 proc suspendInternal(context: CBContext; seconds: float64): CBVar {.importcpp: "chainblocks::suspend(#, #)", header: "runtime.hpp".}
 proc suspend*(context: CBContext; seconds: float64): CBVar {.inline.} =
@@ -322,7 +394,7 @@ template seqLen*(v: CBVarConst): auto = value.v.payload.seqLen
 template tableValue*(v: CBVarConst): auto = v.value.payload.tableValue
 template tableLen*(v: CBVarConst): auto = v.value.payload.tableLen
 template chainValue*(v: CBVarConst): auto = v.value.payload.chainValue
-template blockValue*(v: CBVar): auto = v.value.payload.blockValue
+template blockValue*(v: CBVarConst): auto = v.value.payload.blockValue
 template enumValue*(v: CBVarConst): auto = v.value.payload.enumValue
 template enumVendorId*(v: CBVarConst): auto = v.value.payload.enumVendorId
 template enumTypeId*(v: CBVarConst): auto = v.value.payload.enumTypeId
@@ -390,11 +462,34 @@ proc toFourCC*(str: string): FourCC {.compileTime.} =
   doAssert(str.len == 4, "To make a FourCC from a string the string needs to be exactly 4 chars long")
   return toFourCC(str[0], str[1], str[2], str[3])
 
-proc info*(t: static[CBType],
-           vendorId: uint32 = 0,
-            typeId: uint32 = 0,
-           seqTypes: openarray[CBTypeInfo] = []): CBTypeInfo =
+proc info*(
+  t: static[CBType],
+  vendorId: uint32 = 0,
+  typeId: uint32 = 0,
+  seqTypes: openarray[CBTypeInfo] = [],
+  tableKeys: openarray[cstring] = [],
+  tableTypes: openarray[CBTypeInfo] = []): CBTypeInfo =
   zeroMem(addr result, sizeof(CBTypeInfo))
+  when t == CBType.Table:
+    doAssert tableKeys.len == tableTypes.len
+    if tableKeys.len > 0:
+      result = CBTypeInfo(
+        basicType: CBType.Table,
+        table: TableInfo(
+          keys: CBStrings(
+            elements: cast[ptr UncheckedArray[CBString]](unsafeaddr tableKeys[0]),
+            len: tableKeys.len.uint32,
+            cap: 0
+          ),
+          types: CBTypesInfo(
+            elements: cast[ptr UncheckedArray[CBTypeInfo]](unsafeaddr tableTypes[0]),
+            len: tableTypes.len.uint32,
+            cap: 0
+          )
+        )
+      )
+    else:
+      result = CBTypeInfo(basicType: CBType.Table)
   when t == CBType.Seq:
     if seqTypes.len > 0:
       result = CBTypeInfo(basicType: CBType.Seq,
@@ -688,6 +783,19 @@ when isMainModule or defined(test_block):
   
   var v: CBVar
   echo v
+
+  var
+    x: Var = 10
+    y: Var
+    z: Var
+    sv: Var = "Hello"
+    i: int
+  x = v
+  y = x
+  z = x
+  i = z
+
+  var s: string = sv
 
   let
     info1 = CBType.Object.info()
