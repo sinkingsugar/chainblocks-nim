@@ -27,7 +27,7 @@ type
   CBColor* {.importcpp: "CBColor", header: "chainblocks.hpp".} = object
     r*,g*,b*,a*: uint8
   CBPointer* {.importcpp: "CBPointer", header: "chainblocks.hpp".} = pointer
-  CBString* {.importcpp: "CBString", header: "chainblocks.hpp".} = distinct cstring
+  CBString* {.importcpp: "CBString", header: "chainblocks.hpp".} = object
   CBSeq* {.importcpp: "CBSeq", header: "chainblocks.hpp".} = object
     elements*: ptr UncheckedArray[CBVar]
     len*: uint32
@@ -299,12 +299,12 @@ generateVarConverter float32, Float, floatValue
 
 converter toString*(v: var Var): string =
   assert v.CBVar.valueType == CBType.String
-  $(v.CBVar.payload.stringValue.cstring)
+  $(cast[cstring](v.CBVar.payload.stringValue))
 
 converter fromString*(v: string): Var {.inline.} =
   var tmp: CBVar
   tmp.valueType = CBType.String
-  tmp.payload.stringValue = v.cstring.CBString
+  tmp.payload.stringValue = cast[CBString](v.cstring)
   result.cloneVar(tmp)
 
 iterator items*(arr: TCBArrays): auto {.inline.} =
@@ -323,14 +323,17 @@ proc `[]=`*(v: var TCBArrays; index: int; value: auto) {.inline.} =
   assert index < v.len.int
   v.elements = value
 
-proc toTable*(v: CBVar): Table[string, Var] =
-  assert v.valueType == CBType.Table
+proc toTable*(t: CBTable): Table[string, Var] =
   result = initTable[string, Var]()
   proc cb(key: cstring; value: ptr CBVar; data: pointer): CBBool {.cdecl.} =
     var res = cast[ptr Table[string, Var]](data)
     res[][$key] = value[]
     true
-  v.payload.tableValue.api[].tableForEach(v.payload.tableValue, cb, addr result)
+  t.api[].tableForEach(t, cb, addr result)
+
+proc `[]=`*(t: var CBTable; key: string; val: CBVar) =
+  var varPtr = t.api[].tableAt(t, key.cstring)
+  varPtr[] = val
 
 proc suspendInternal(context: CBContext; seconds: float64): CBVar {.importcpp: "chainblocks::suspend(#, #)", header: "runtime.hpp".}
 proc suspend*(context: CBContext; seconds: float64): CBVar {.inline.} =
