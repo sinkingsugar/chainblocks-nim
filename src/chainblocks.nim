@@ -335,6 +335,14 @@ proc `[]=`*(t: var CBTable; key: string; val: CBVar) =
   var varPtr = t.api[].tableAt(t, key.cstring)
   varPtr[] = val
 
+proc `[]`*(t: var CBTable; key: string): var CBVar =
+  var varPtr = t.api[].tableAt(t, key.cstring)
+  varPtr[]
+
+proc `[]`*(t: CBTable; key: string): CBVar =
+  var varPtr = t.api[].tableAt(t, key.cstring)
+  varPtr[]
+
 proc suspendInternal(context: CBContext; seconds: float64): CBVar {.importcpp: "chainblocks::suspend(#, #)", header: "runtime.hpp".}
 proc suspend*(context: CBContext; seconds: float64): CBVar {.inline.} =
   var frame = getFrameState()
