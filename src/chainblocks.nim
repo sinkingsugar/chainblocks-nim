@@ -260,6 +260,7 @@ type
     seqFastDelete: proc(s: ptr CBSeq; idx: uint32) {.cdecl.}
     seqSlowDelete: proc(s: ptr CBSeq; idx: uint32) {.cdecl.}
     seqInsert: proc(s: ptr CBSeq; idx: uint32; val: ptr CBVar) {.cdecl.}
+    seqPop: proc(s: ptr CBSeq): CBVar {.cdecl.}
 
   TCBArrays = CBSeq | CBStrings | CBlocks | CBTypesInfo | CBExposedTypesInfo | CBParametersInfo
 
@@ -739,6 +740,11 @@ when isMainModule and defined(testing):
   echo tab["test"]
   echo $(cast[cstring](sv.CBVar.stringValue))
 
+  var cbseq = newSeqVar()
+  echo x.CBVar
+  cbseq.add(move(x))
+  echo x.CBVar
+
   var s: string = sv
 
   let
@@ -754,6 +760,18 @@ when isMainModule and defined(testing):
   var
     idata: CBInstanceData
   idata.self = nil
+
+  block one:
+    var
+      se = newSeqVar()
+      s1: Var = "Hello"
+      s2: Var = "World"
+      s3: Var = "Ciao"
+    se.add(move(s1))
+    se.add(move(s2))
+    echo se.pop().CBVar
+    se[0] = move(s3)
+
 
   proc inputTypes*(b: var CBPow2Block): CBTypesInfo = AnyTypes
   proc outputTypes*(b: var CBPow2Block): CBTypesInfo = AnyTypes

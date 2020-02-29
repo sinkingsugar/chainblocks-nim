@@ -137,6 +137,81 @@ template `enumValue=`*(v: Var, val: auto) = v.CBVar.payload.enumValue = val
 template `enumVendorId=`*(v: Var, val: auto) = v.CBVar.payload.enumVendorId = val
 template `enumTypeId=`*(v: Var, val: auto) = v.CBVar.payload.enumTypeId = val
 
+# Tables
+
+proc newTableVar*(): Var =
+  var table = Core.tableNew()
+  result.valueType = CBType.Table
+  result.tableValue = table
+
+proc `[]=`*(v: var CBVar | var Var; key: string; val: CBVar) =
+  assert v.valueType == CBType.Table
+  var t = v.tableValue
+  var varPtr = t.api[].tableAt(t, key.cstring)
+  varPtr[] = val
+
+proc `[]=`*(v: var Var; key: string; val: sink Var) =
+  assert v.valueType == CBType.Table
+  var t = v.tableValue
+  var varPtr = t.api[].tableAt(t, key.cstring)
+  varPtr[] = val.CBVar
+  wasMoved(val)
+
+proc `[]`*(v: var CBVar | var Var; key: string): var CBVar =
+  assert v.valueType == CBType.Table
+  var t = v.tableValue
+  var varPtr = t.api[].tableAt(t, key.cstring)
+  varPtr[]
+
+proc `[]`*(v: CBVar | Var; key: string): CBVar =
+  assert v.valueType == CBType.Table
+  var t = v.tableValue
+  var varPtr = t.api[].tableAt(t, key.cstring)
+  varPtr[]
+
+# Seqs
+
+proc newSeqVar*(): Var =
+  result.valueType = CBType.Seq
+
+proc len*(v: Var): int {.inline.} =
+  assert v.valueType == CBType.Seq
+  v.seqValue.len.int
+
+proc setLen*(v: var Var; newLen: Natural) {.inline.} =
+  assert v.valueType == CBType.Seq
+  Core.seqResize(addr v.seqValue, newLen.uint32)
+
+proc add*(v: var Var; val: CBVar) {.inline.} =
+  assert v.valueType == CBType.Seq
+  Core.seqPush(addr v.seqValue, unsafeaddr val)
+
+proc add*(v: var Var; val: sink Var) {.inline.} =
+  assert v.valueType == CBType.Seq
+  Core.seqPush(addr v.seqValue, val.CBVar.addr)
+  wasMoved(val)
+
+proc del*(v: var Var; i: Natural) {.inline.} =
+  assert v.valueType == CBType.Seq
+  Core.seqFastDelete(addr v.seqValue, i.uint32)
+
+proc delete*(v: var Var; i: Natural) {.inline.} =
+  assert v.valueType == CBType.Seq
+  Core.seqSlowDelete(addr v.seqValue, i.uint32)
+
+proc insert*(v: var Var; val: CBVar; idx = 0.Natural) =
+  assert v.valueType == CBType.Seq
+  Core.seqInsert(addr v.seqValue, idx.uint32, unsafeaddr val)
+
+proc insert*(v: var Var; val: sink Var; idx = 0.Natural) =
+  assert v.valueType == CBType.Seq
+  Core.seqInsert(addr v.seqValue, idx.uint32, val.CBVar.addr)
+  wasMoved(val)
+
+proc pop*(v: var Var): CBVar =
+  assert v.valueType == CBType.Seq
+  result = Core.seqPop(addr v.seqValue)
+
 iterator items*(arr: CBVar | Var): CBVar {.inline.} =
   assert arr.valueType == CBType.Seq
   for i in 0..<arr.seqValue.len:
@@ -152,54 +227,13 @@ proc `[]`*(v: CBVar | Var; index: int): CBVar {.inline, noinit.} =
   assert index < v.seqValue.len.int
   v.seqValue.elements[index]
 
-proc `[]=`*(v: var CBVar | var Var; index: int; value: auto) {.inline.} =
+proc `[]=`*(v: var CBVar | var Var; index: int; value: CBVar) {.inline.} =
   assert v.valueType == CBType.Seq
   assert index < v.seqValue.len.int
   v.seqValue.elements[index] = value
 
-proc `[]=`*(v: var CBVar | var Var; key: string; val: CBVar) =
-  assert v.valueType == CBType.Table
-  var t = v.tableValue
-  var varPtr = t.api[].tableAt(t, key.cstring)
-  varPtr[] = val
-
-proc `[]`*(v: var CBVar | var Var; key: string): var CBVar =
-  assert v.valueType == CBType.Table
-  var t = v.tableValue
-  var varPtr = t.api[].tableAt(t, key.cstring)
-  varPtr[]
-
-proc `[]`*(v: CBVar | Var; key: string): CBVar =
-  assert v.valueType == CBType.Table
-  var t = v.tableValue
-  var varPtr = t.api[].tableAt(t, key.cstring)
-  varPtr[]
-
-proc newTableVar*(): Var =
-  var table = Core.tableNew()
-  result.valueType = CBType.Table
-  result.tableValue = table
-
-proc len*(v: Var): int {.inline.} =
+proc `[]=`*(v: var Var; index: int; value: sink Var) {.inline.} =
   assert v.valueType == CBType.Seq
-  v.seqValue.len.int
-
-proc setLen*(v: var Var; newLen: Natural) {.inline.} =
-  assert v.valueType == CBType.Seq
-  Core.seqResize(addr v.seqValue, newLen.uint32)
-
-proc add*(v: var Var; val: CBVar) {.inline.} =
-  assert v.valueType == CBType.Seq
-  Core.seqPush(addr v.seqValue, unsafeaddr val)
-
-proc del*(v: var Var; i: Natural) {.inline.} =
-  assert v.valueType == CBType.Seq
-  Core.seqFastDelete(addr v.seqValue, i.uint32)
-
-proc delete*(v: var Var; i: Natural) {.inline.} =
-  assert v.valueType == CBType.Seq
-  Core.seqSlowDelete(addr v.seqValue, i.uint32)
-
-proc insert*(v: var Var; val: CBVar; idx = 0.Natural) =
-  assert v.valueType == CBType.Seq
-  Core.seqInsert(addr v.seqValue, idx.uint32, unsafeaddr val)
+  assert index < v.seqValue.len.int
+  v.seqValue.elements[index] = value.CBVar
+  wasMoved(value)
