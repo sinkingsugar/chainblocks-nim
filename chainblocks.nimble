@@ -25,13 +25,24 @@ type
     StaticLib,
     NoNimTraces,
     FullDeps
+    CppBuild
 
 proc build(filename: string; features: set[Features] = {}) =
   var (_, name, _) = splitFile(filename)
-  var cmd = "nim cpp --gc:arc"
+  var cmd = "nim "
+  if CppBuild in features:
+    cmd &= " cpp "
+  else:
+    cmd &= " c "
+  cmd &= " --gc:arc"
+  cmd &= " --passC:-I../chainblocks/include"
+  cmd &= " --passC:-I../chainblocks/src/core"
+  cmd &= " --passC:-I../chainblocks/deps/easyloggingpp/src"
+  cmd &= " --passC:-I../chainblocks/deps/magic_enum/include"
   if Release in features:
     cmd &= " -d:danger "
   if Run in features:
+    cmd &= " --passL:-lstdc++ "
     cmd &= " -r --passL:-L../chainblocks/build --passL:-lcb_static "
     when defined windows:
       cmd &= " --passL:-fuse-ld=lld "
@@ -60,6 +71,9 @@ task compile, "Build all":
 
 task test, "Build all":
   build "src/chainblocks.nim", {Run, Test}
+
+task testcpp, "Build all":
+  build "src/chainblocks.nim", {Run, Test, CppBuild}
 
 task testfull, "Build all":
   build "src/chainblocks.nim", {Run, Test, FullDeps}

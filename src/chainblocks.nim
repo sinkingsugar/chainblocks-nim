@@ -1,17 +1,4 @@
-# TODO
-# Remove nimline, allow pure C builds
-
-import nimline
 import os, macros, typetraits, tables
-
-const
-  modulePath = currentSourcePath().splitPath().head
-cppincludes(modulePath & "/../../chainblocks/include")
-cppincludes(modulePath & "/../../chainblocks/src/core")
-cppincludes(modulePath & "/../../chainblocks/deps/easyloggingpp/src")
-cppincludes(modulePath & "/../../chainblocks/deps/nameof/include")
-cppincludes(modulePath & "/../../chainblocks/deps/magic_enum/include")
-{.passC: "-std=c++17".}
 
 type
   FourCC* = distinct int32
@@ -27,7 +14,7 @@ type
   CBFloat2* {.importc: "CBFloat2", header: "chainblocks.h".} = object
   CBFloat3* {.importc: "CBFloat3", header: "chainblocks.h".} = object
   CBFloat4* {.importc: "CBFloat4", header: "chainblocks.h".} = object
-  CBColor* {.importc: "CBColor", header: "chainblocks.h".} = object
+  CBColor* {.importc: "struct CBColor", header: "chainblocks.h".} = object
     r*,g*,b*,a*: uint8
   CBPointer* {.importc: "CBPointer", header: "chainblocks.h".} = pointer
   CBString* {.importc: "CBString", header: "chainblocks.h".} = object
@@ -35,7 +22,7 @@ type
     elements*: ptr UncheckedArray[CBVar]
     len*: uint32
     cap*: uint32
-  CBTable* {.importc: "CBTable", header: "chainblocks.h".} = object
+  CBTable* {.importc: "struct CBTable", header: "chainblocks.h".} = object
     opaque: pointer
     api: ptr CBTableInterface
   CBStrings* {.importc: "CBStrings", header: "chainblocks.h".} = object
@@ -46,14 +33,14 @@ type
   CBChain* {.importc: "CBChain", header: "chainblocks.h".} = object
   CBChainPtr* = ptr CBChain
   CBNode* {.importc: "CBNode", header: "chainblocks.h".} = object
-  CBContextObj* {.importc: "CBContext", header: "chainblocks.h".} = object
+  CBContextObj* {.importc: "struct CBContext", header: "chainblocks.h".} = object
   CBContext* = ptr CBContextObj
 
   CBEnumInfo* {.importc: "CBEnumInfo", header: "chainblocks.h".} = object
     name*: cstring
     labels*: CBStrings
 
-  CBImage* {.importc: "CBImage", header: "chainblocks.h".} = object
+  CBImage* {.importc: "struct CBImage", header: "chainblocks.h".} = object
     width*: uint16
     height*: uint16
     channels*: uint8
@@ -109,7 +96,7 @@ type
     keys: CBStrings
     types: CBTypesInfo
       
-  CBTypeInfo* {.importc: "CBTypeInfo", header: "chainblocks.h".} = object
+  CBTypeInfo* {.importc: "struct CBTypeInfo", header: "chainblocks.h".} = object
     basicType*: CBType
     seqTypes*: CBTypesInfo
     `object`*: ObjectInfo
@@ -123,7 +110,7 @@ type
   CBObjectInfo* {.importc: "CBObjectInfo", header: "chainblocks.h".} = object
     name*: cstring
 
-  CBParameterInfo* {.importc: "CBParameterInfo", header: "chainblocks.h".} = object
+  CBParameterInfo* {.importc: "struct CBParameterInfo", header: "chainblocks.h".} = object
     name*: cstring
     valueTypes*: CBTypesInfo
     help*: cstring
@@ -133,17 +120,17 @@ type
     len*: uint32
     cap*: uint32
 
-  CBExposedTypeInfo* {.importc: "CBExposedTypeInfo", header: "chainblocks.h".} = object
+  CBExposedTypeInfo* {.importc: "struct CBExposedTypeInfo", header: "chainblocks.h".} = object
     name*: cstring
     help*: cstring
     exposedType*: CBTypeInfo
 
-  CBExposedTypesInfo* {.importc: "CBExposedTypesInfo", header: "chainblocks.h".} = object
+  CBExposedTypesInfo* {.importc: "struct CBExposedTypesInfo", header: "chainblocks.h".} = object
     elements*: ptr UncheckedArray[CBExposedTypeInfo]
     len*: uint32
     cap*: uint32
 
-  CBValidationResult* {.importc: "CBValidationResult", header: "chainblocks.h".} = object
+  CBValidationResult* {.importc: "struct CBValidationResult", header: "chainblocks.h".} = object
     outputType*: CBTypeInfo
     exposedInfo*: CBExposedTypesInfo
   
@@ -152,7 +139,7 @@ type
     Restart, # Restart the chain from the top
     Stop # Stop the chain execution
 
-  CBVarPayload* {.importc: "CBVarPayload", header: "chainblocks.h".} = object
+  CBVarPayload* {.importc: "struct CBVarPayload", header: "chainblocks.h".} = object
     chainState*: CBChainState
     objectValue*: CBPointer
     objectVendorId*: uint32
@@ -179,7 +166,7 @@ type
     enumVendorId*: int32
     enumTypeId*: int32
 
-  CBVar* {.importc: "CBVar", header: "chainblocks.h".} = object
+  CBVar* {.importc: "struct CBVar", header: "chainblocks.h".} = object
     payload*: CBVarPayload
     valueType*: CBType
 
@@ -213,7 +200,7 @@ type
 
   CBMutateProc* {.importc: "CBMutateProc", header: "chainblocks.h".} = proc(b: ptr CBlock; options: CBTable) {.cdecl.}
 
-  CBlock* {.importc: "CBlock", header: "chainblocks.h".} = object
+  CBlock* {.importc: "struct CBlock", header: "chainblocks.h".} = object
     inlineBlockId*: uint8
     
     name*: CBNameProc
@@ -252,16 +239,21 @@ type
 
   CBCallback* {.importc: "CBCallback", header: "chainblocks.h".} = proc(): void {.cdecl.}
 
-  CBInstanceData* {.importc: "CBInstanceData", header: "chainblocks.h".} = object
+  CBInstanceData* {.importc: "struct CBInstanceData", header: "chainblocks.h".} = object
     self {.importc: "block"}: ptr CBlock
     inputType*: CBTypeInfo
     stack*: CBTypesInfo
     shared*: CBExposedTypesInfo
 
-  CBCore* {.importc: "CBCore", header: "chainblocks.h".} = object
+  CBCore* {.importc: "struct CBCore", header: "chainblocks.h".} = object
     tableNew*: proc(): CBTable {.cdecl.}
     cloneVar: proc(dst: pointer; src: pointer) {.cdecl.}
     destroyVar: proc(v: pointer) {.cdecl.}
+    suspend: proc(ctx: CBContext; seconds: float64): CBVar {.cdecl.}
+    referenceVariable: proc(ctx: CBContext; name: cstring): ptr CBVar {.cdecl.}
+    releaseVariable: proc(v: ptr CBVar) {.cdecl.}
+    registerBlock: proc(name: cstring; ctor: CBBlockConstructor) {.cdecl.}
+    throwException: proc(msg: cstring) {.cdecl.}
 
   TCBArrays = CBSeq | CBStrings | CBlocks | CBTypesInfo | CBExposedTypesInfo | CBParametersInfo
 
@@ -358,15 +350,13 @@ proc `[]`*(t: CBTable; key: string): CBVar =
   var varPtr = t.api[].tableAt(t, key.cstring)
   varPtr[]
 
-proc suspendInternal(context: CBContext; seconds: float64): CBVar {.importcpp: "chainblocks::suspend(#, #)", header: "runtime.hpp".}
 proc suspend*(context: CBContext; seconds: float64): CBVar {.inline.} =
   var frame = getFrameState()
-  result = suspendInternal(context, seconds)
+  result = Core.suspend(context, seconds)
   setFrameState(frame)
 
-proc referenceVariable*(context: CBContext; name: cstring): ptr CBVar {.importcpp: "chainblocks::referenceVariable(#, #)", header: "runtime.hpp".}
-proc reference*(name: cstring; context: CBContext): ptr CBVar {.inline.} = referenceVariable(context, name)
-proc release*(v: ptr CBVar) {.importcpp: "chainblocks::releaseVariable(#)", header: "runtime.hpp".}
+proc reference*(name: cstring; context: CBContext): ptr CBVar {.inline.} = Core.referenceVariable(context, name)
+proc release*(v: ptr CBVar) {.inline.} = Core.releaseVariable(v)
 
 template chainState*(v: CBVar): auto = v.payload.chainState
 template objectValue*(v: CBVar): auto = v.payload.objectValue
@@ -659,12 +649,11 @@ proc activate*(b: auto; context: CBContext; input: CBVar): CBVar =
   const msg = typedesc[type(b)].name & " is using default activate proc"
   {.warning: msg.}
 
-proc throwCBException*(msg: string) = emitc("throw chainblocks::CBException(", `msg`.cstring, ");")
-proc throwCBException*(msg: cstring) = emitc("throw chainblocks::CBException(", `msg`, ");")
-
-proc registerBlock*(name: cstring; initProc: CBBlockConstructor) {.importcpp: "chainblocks::registerBlock(@)", header: "runtime.hpp".}
+proc registerBlock*(name: cstring; initProc: CBBlockConstructor) {.inline.} = Core.registerBlock(name, initProc)
 
 proc callDestroy*[T](obj: var T) = `=destroy`(obj)
+
+proc throwException*(msg: cstring) {.inline.} = Core.throwException(msg)
 
 macro chainblock*(blk: untyped; blockName: string; namespaceStr: string = ""; testCode: untyped = nil): untyped =
   var
@@ -755,7 +744,7 @@ macro chainblock*(blk: untyped; blockName: string; namespaceStr: string = ""; te
       try:
         result = b.sb.activate(context, input)
       except:
-        throwCBException getCurrentExceptionMsg()
+        throwException getCurrentExceptionMsg()
     proc `cleanupProc`*(b: `rtName`) {.cdecl.} =
       b.sb.cleanup()
     when compiles((var x: `blk`; x.mutate(CBTable()))):

@@ -22,3 +22,4 @@ cd ../../chainblocks-nim/
 
 nimble install -y --depsonly
 nimble test
+nimble testcpp
