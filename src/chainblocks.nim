@@ -1,5 +1,11 @@
 import os, macros, typetraits, tables
 
+const
+  modulePath = currentSourcePath().splitPath().head
+  cbheader = "-I" & modulePath & "/../../chainblocks/include"
+
+{.passC: cbheader.}
+
 type
   FourCC* = distinct int32
 

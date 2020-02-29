@@ -35,10 +35,6 @@ proc build(filename: string; features: set[Features] = {}) =
   else:
     cmd &= " c "
   cmd &= " --gc:arc"
-  cmd &= " --passC:-I../chainblocks/include"
-  cmd &= " --passC:-I../chainblocks/src/core"
-  cmd &= " --passC:-I../chainblocks/deps/easyloggingpp/src"
-  cmd &= " --passC:-I../chainblocks/deps/magic_enum/include"
   if Release in features:
     cmd &= " -d:danger "
   if Run in features:
