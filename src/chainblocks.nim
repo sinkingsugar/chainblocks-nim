@@ -254,6 +254,12 @@ type
     releaseVariable: proc(v: ptr CBVar) {.cdecl.}
     registerBlock: proc(name: cstring; ctor: CBBlockConstructor) {.cdecl.}
     throwException: proc(msg: cstring) {.cdecl.}
+    seqFree: proc(s: ptr CBSeq) {.cdecl.}
+    seqPush: proc(s: ptr CBSeq; val: ptr CBVar) {.cdecl.}
+    seqResize: proc(s: ptr CBSeq; size: uint32) {.cdecl.}
+    seqFastDelete: proc(s: ptr CBSeq; idx: uint32) {.cdecl.}
+    seqSlowDelete: proc(s: ptr CBSeq; idx: uint32) {.cdecl.}
+    seqInsert: proc(s: ptr CBSeq; idx: uint32; val: ptr CBVar) {.cdecl.}
 
   TCBArrays = CBSeq | CBStrings | CBlocks | CBTypesInfo | CBExposedTypesInfo | CBParametersInfo
 

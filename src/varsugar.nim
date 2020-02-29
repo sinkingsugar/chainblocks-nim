@@ -179,3 +179,27 @@ proc newTableVar*(): Var =
   var table = Core.tableNew()
   result.valueType = CBType.Table
   result.tableValue = table
+
+proc len*(v: Var): int {.inline.} =
+  assert v.valueType == CBType.Seq
+  v.seqValue.len.int
+
+proc setLen*(v: var Var; newLen: Natural) {.inline.} =
+  assert v.valueType == CBType.Seq
+  Core.seqResize(addr v.seqValue, newLen.uint32)
+
+proc add*(v: var Var; val: CBVar) {.inline.} =
+  assert v.valueType == CBType.Seq
+  Core.seqPush(addr v.seqValue, unsafeaddr val)
+
+proc del*(v: var Var; i: Natural) {.inline.} =
+  assert v.valueType == CBType.Seq
+  Core.seqFastDelete(addr v.seqValue, i.uint32)
+
+proc delete*(v: var Var; i: Natural) {.inline.} =
+  assert v.valueType == CBType.Seq
+  Core.seqSlowDelete(addr v.seqValue, i.uint32)
+
+proc insert*(v: var Var; val: CBVar; idx = 0.Natural) =
+  assert v.valueType == CBType.Seq
+  Core.seqInsert(addr v.seqValue, idx.uint32, unsafeaddr val)
