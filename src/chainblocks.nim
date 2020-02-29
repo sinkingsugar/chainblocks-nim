@@ -255,9 +255,22 @@ type
     stack*: CBTypesInfo
     shared*: CBExposedTypesInfo
 
+  CBCore* {.importc: "CBCore", header: "chainblocks.h".} = object
+    tableNew*: proc(): CBTable {.cdecl.}
+
   TCBArrays = CBSeq | CBStrings | CBlocks | CBTypesInfo | CBExposedTypesInfo | CBParametersInfo
 
   Var* = distinct CBVar
+
+const
+  ABI_VERSION = 0x20200101
+ 
+proc startup(_: type[CBCore]): CBCore =
+  proc chainblocksInterface(abiVersion: uint32): CBCore {.importc: "chainblocksInterface", header: "chainblocks.h".}
+  return chainblocksInterface(ABI_VERSION)
+
+let
+  Core = CBCore.startup()
 
 proc cloneVar*(dst: var CBVar | var Var; src: CBVar | Var) {.importcpp: "chainblocks::cloneVar(#, #)", header: "runtime.hpp".}
 proc destroyVar*(dst: var CBVar | var Var){.importcpp: "chainblocks::destroyVar(#)", header: "runtime.hpp".}
@@ -785,13 +798,13 @@ macro chainblock*(blk: untyped; blockName: string; namespaceStr: string = ""; te
 
 # must link like -Wl,--whole-archive -lhttp -Wl,--no-whole-archive
       
-when isMainModule or defined(test_block):
+when isMainModule and defined(testing):
   type
     CBPow2Block = object
       inputValue: float
       myseq: seq[byte]
       params: array[1, CBVar]
-  
+
   var v: CBVar
   echo v
 
@@ -801,10 +814,13 @@ when isMainModule or defined(test_block):
     z: Var
     sv: Var = "Hello"
     i: int
-  x = v
+    tab = Core.tableNew()
   y = x
   z = x
   i = z
+  tab["test"] = x.CBVar
+  echo tab["test"]
+  tab.api[].tableFree(tab)
 
   var s: string = sv
 
