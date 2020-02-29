@@ -41,7 +41,7 @@ proc build(filename: string; features: set[Features] = {}) =
         cmd &= """ --passL:../chainblocks/deps/bimg/.build/win64_mingw-gcc/bin/libbimgRelease.a """
         cmd &= """ --passL:../chainblocks/external/SDL2-2.0.10/x86_64-w64-mingw32/lib/libSDL2.a """
     elif defined linux:
-      cmd &= """ --passL:"-lboost_context -pthread -ldl -lrt """
+      cmd &= """ --passL:"-lboost_context -pthread -ldl -lrt" """
   if StaticLib in features:
     cmd &= " --app:staticlib -d:auto_nim_main --noMain -o:" & name & ".a "
   if Test in features:

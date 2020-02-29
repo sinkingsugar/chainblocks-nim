@@ -260,6 +260,8 @@ type
 
   CBCore* {.importc: "CBCore", header: "chainblocks.h".} = object
     tableNew*: proc(): CBTable {.cdecl.}
+    cloneVar: proc(dst: pointer; src: pointer) {.cdecl.}
+    destroyVar: proc(v: pointer) {.cdecl.}
 
   TCBArrays = CBSeq | CBStrings | CBlocks | CBTypesInfo | CBExposedTypesInfo | CBParametersInfo
 
@@ -275,18 +277,15 @@ proc startup(_: type[CBCore]): CBCore =
 let
   Core = CBCore.startup()
 
-proc cloneVar*(dst: var CBVar | var Var; src: CBVar | Var) {.importcpp: "chainblocks::cloneVar(#, #)", header: "runtime.hpp".}
-proc destroyVar*(dst: var CBVar | var Var){.importcpp: "chainblocks::destroyVar(#)", header: "runtime.hpp".}
-
 proc `=destroy`(v: var Var) {.inline.} =
-  v.destroyVar()
+  Core.destroyVar(addr v)
 
 proc `=`(dst: var Var; source: Var) {.inline.} =
   zeroMem(addr dst, sizeof(CBVar))
-  dst.cloneVar(source)
+  Core.cloneVar(addr dst, unsafeaddr source)
 
 converter toVar*(v: CBVar): Var {.inline.} =
-  result.cloneVar(v)
+  Core.cloneVar(addr result, unsafeaddr v)
 
 macro generateVarConverter(nimVal, cbType, cbVal: untyped): untyped =
   let
@@ -321,7 +320,7 @@ converter fromString*(v: string): Var {.inline.} =
   var tmp: CBVar
   tmp.valueType = CBType.String
   tmp.payload.stringValue = cast[CBString](v.cstring)
-  result.cloneVar(tmp)
+  Core.cloneVar(addr result, addr tmp)
 
 iterator items*(arr: TCBArrays): auto {.inline.} =
   for i in 0..<arr.len:
@@ -815,6 +814,7 @@ when isMainModule and defined(testing):
   tab["test"] = x.CBVar
   echo tab["test"]
   tab.api[].tableFree(tab)
+  echo $(cast[cstring](sv.CBVar.stringValue))
 
   var s: string = sv
 
