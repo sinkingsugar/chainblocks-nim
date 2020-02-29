@@ -185,9 +185,6 @@ type
   CBSetupProc* {.importc: "CBSetupProc", header: "chainblocks.h".} = proc(b: ptr CBlock) {.cdecl.}
   CBDestroyProc* {.importc: "CBDestroyProc", header: "chainblocks.h".} = proc(b: ptr CBlock) {.cdecl.}
 
-  CBPreChainProc* {.importc: "CBPreChainProc", header: "chainblocks.h".} = proc(b: ptr CBlock; context: CBContext) {.cdecl.}
-  CBPostChainProc* {.importc: "CBPostChainProc", header: "chainblocks.h".} = proc(b: ptr CBlock; context: CBContext) {.cdecl.}
-
   CBInputTypesProc*{.importc: "CBInputTypesProc", header: "chainblocks.h".}  = proc(b: ptr CBlock): CBTypesInfo {.cdecl.}
   CBOutputTypesProc* {.importc: "CBOutputTypesProc", header: "chainblocks.h".} = proc(b: ptr CBlock): CBTypesInfo {.cdecl.}
 
@@ -214,9 +211,6 @@ type
     
     setup*: CBSetupProc
     destroy*: CBDestroyProc
-    
-    preChain*: CBPreChainProc
-    postChain*: CBPostChainProc
     
     inputTypes*: CBInputTypesProc
     outputTypes*: CBOutputTypesProc
@@ -334,7 +328,7 @@ proc `[]`*(v: TCBArrays; index: int): auto {.inline, noinit.} =
 
 proc `[]=`*(v: var TCBArrays; index: int; value: auto) {.inline.} =
   assert index < v.len.int
-  v.elements = value
+  v.elements[index] = value
 
 proc toTable*(t: CBTable): Table[string, Var] =
   result = initTable[string, Var]()
@@ -364,90 +358,7 @@ proc suspend*(context: CBContext; seconds: float64): CBVar {.inline.} =
 proc reference*(name: cstring; context: CBContext): ptr CBVar {.inline.} = Core.referenceVariable(context, name)
 proc release*(v: ptr CBVar) {.inline.} = Core.releaseVariable(v)
 
-template chainState*(v: CBVar): auto = v.payload.chainState
-template objectValue*(v: CBVar): auto = v.payload.objectValue
-template objectVendorId*(v: CBVar): auto = v.payload.objectVendorId
-template objectTypeId*(v: CBVar): auto = v.payload.objectTypeId
-template boolValue*(v: CBVar): auto = v.payload.boolValue
-template intValue*(v: CBVar): auto = v.payload.intValue
-template int2Value*(v: CBVar): auto = v.payload.int2Value
-template int3Value*(v: CBVar): auto = v.payload.int3Value
-template int4Value*(v: CBVar): auto = v.payload.int4Value
-template int8Value*(v: CBVar): auto = v.payload.int8Value
-template int16Value*(v: CBVar): auto = v.payload.int16Value
-template floatValue*(v: CBVar): auto = v.payload.floatValue
-template float2Value*(v: CBVar): auto = v.payload.float2Value
-template float3Value*(v: CBVar): auto = v.payload.float3Value
-template float4Value*(v: CBVar): auto = v.payload.float4Value
-template stringValue*(v: CBVar): auto = v.payload.stringValue
-template colorValue*(v: CBVar): auto = v.payload.colorValue
-template imageValue*(v: CBVar): auto = v.payload.imageValue
-template seqValue*(v: CBVar): auto = v.payload.seqValue
-template seqLen*(v: CBVar): auto = v.payload.seqLen
-template tableValue*(v: CBVar): auto = v.payload.tableValue
-template tableLen*(v: CBVar): auto = v.payload.tableLen
-template chainValue*(v: CBVar): auto = v.payload.chainValue
-template blockValue*(v: CBVar): auto = v.payload.blockValue
-template enumValue*(v: CBVar): auto = v.payload.enumValue
-template enumVendorId*(v: CBVar): auto = v.payload.enumVendorId
-template enumTypeId*(v: CBVar): auto = v.payload.enumTypeId
-
-template valueType*(v: CBVarConst): auto = v.value.valueType
-template chainState*(v: CBVarConst): auto = v.value.payload.chainState
-template objectValue*(v: CBVarConst): auto = v.value.payload.objectValue
-template objectVendorId*(v: CBVarConst): auto = v.value.payload.objectVendorId
-template objectTypeId*(v: CBVarConst): auto = v.value.payload.objectTypeId
-template boolValue*(v: CBVarConst): auto = v.value.payload.boolValue
-template intValue*(v: CBVarConst): auto = v.value.payload.intValue
-template int2Value*(v: CBVarConst): auto = v.value.payload.int2Value
-template int3Value*(v: CBVarConst): auto = v.value.payload.int3Value
-template int4Value*(v: CBVarConst): auto = v.value.payload.int4Value
-template int8Value*(v: CBVarConst): auto = v.value.payload.int8Value
-template int16Value*(v: CBVarConst): auto = v.value.payload.int16Value
-template floatValue*(v: CBVarConst): auto = v.value.payload.floatValue
-template float2Value*(v: CBVarConst): auto = v.value.payload.float2Value
-template float3Value*(v: CBVarConst): auto = v.value.payload.float3Value
-template float4Value*(v: CBVarConst): auto = v.value.payload.float4Value
-template stringValue*(v: CBVarConst): auto = v.value.payload.stringValue
-template colorValue*(v: CBVarConst): auto = v.value.payload.colorValue
-template imageValue*(v: CBVarConst): auto = v.value.payload.imageValue
-template seqValue*(v: CBVarConst): auto = v.value.payload.seqValue
-template seqLen*(v: CBVarConst): auto = value.v.payload.seqLen
-template tableValue*(v: CBVarConst): auto = v.value.payload.tableValue
-template tableLen*(v: CBVarConst): auto = v.value.payload.tableLen
-template chainValue*(v: CBVarConst): auto = v.value.payload.chainValue
-template blockValue*(v: CBVarConst): auto = v.value.payload.blockValue
-template enumValue*(v: CBVarConst): auto = v.value.payload.enumValue
-template enumVendorId*(v: CBVarConst): auto = v.value.payload.enumVendorId
-template enumTypeId*(v: CBVarConst): auto = v.value.payload.enumTypeId
-
-template `chainState=`*(v: CBVar, val: auto) = v.payload.chainState = val
-template `objectValue=`*(v: CBVar, val: auto) = v.payload.objectValue = val
-template `objectVendorId=`*(v: CBVar, val: auto) = v.payload.objectVendorId = val
-template `objectTypeId=`*(v: CBVar, val: auto) = v.payload.objectTypeId = val
-template `boolValue=`*(v: CBVar, val: auto) = v.payload.boolValue = val
-template `intValue=`*(v: CBVar, val: auto) = v.payload.intValue = val
-template `int2Value=`*(v: CBVar, val: auto) = v.payload.int2Value = val
-template `int3Value=`*(v: CBVar, val: auto) = v.payload.int3Value = val
-template `int4Value=`*(v: CBVar, val: auto) = v.payload.int4Value = val
-template `int8Value=`*(v: CBVar, val: auto) = v.payload.int8Value = val
-template `int16Value=`*(v: CBVar, val: auto) = v.payload.int16Value = val
-template `floatValue=`*(v: CBVar, val: auto) = v.payload.floatValue = val
-template `float2Value=`*(v: CBVar, val: auto) = v.payload.float2Value = val
-template `float3Value=`*(v: CBVar, val: auto) = v.payload.float3Value = val
-template `float4Value=`*(v: CBVar, val: auto) = v.payload.float4Value = val
-template `stringValue=`*(v: CBVar, val: auto) = v.payload.stringValue = val
-template `colorValue=`*(v: CBVar, val: auto) = v.payload.colorValue = val
-template `imageValue=`*(v: CBVar, val: auto) = v.payload.imageValue = val
-template `seqValue=`*(v: CBVar, val: auto) = v.payload.seqValue = val
-template `seqLen=`*(v: CBVar, val: auto) = v.payload.seqLen = val
-template `tableValue=`*(v: CBVar, val: auto) = v.payload.tableValue = val
-template `tableLen=`*(v: CBVar, val: auto) = v.payload.tableLen = val
-template `chainValue=`*(v: CBVar, val: auto) = v.payload.chainValue = val
-template `blockValue=`*(v: CBVar, val: auto) = v.payload.blockValue = val
-template `enumValue=`*(v: CBVar, val: auto) = v.payload.enumValue = val
-template `enumVendorId=`*(v: CBVar, val: auto) = v.payload.enumVendorId = val
-template `enumTypeId=`*(v: CBVar, val: auto) = v.payload.enumTypeId = val
+include varsugar
   
 type SupportedTypes = seq[CBVar] | SomeFloat | SomeInteger
 
@@ -606,7 +517,17 @@ generateCBTypeInfos Seq
 generateCBTypeInfos Table
   
 # Block interface/default
-  
+
+type
+  BlockWithWarmup* = concept var x
+    x.warmup(CBContext)
+  BlockWithCompose* = concept var x
+    x.compose(CBInstanceData) is CBTypeInfo
+  BlockWithCustomName* = concept var x
+    x.name is cstring
+  BlockWithMutate* = concept var x
+    x.mutate(CBTable)
+
 proc help*(b: auto): cstring =
   const msg = typedesc[type(b)].name & " is using default help proc"
   {.hint: msg.}
@@ -706,7 +627,7 @@ macro chainblock*(blk: untyped; blockName: string; namespaceStr: string = ""; te
       
       `rtName`* = ptr `rtNameValue`
 
-    when compiles((var x: `blk`; discard x.name())):
+    when `blk` is BlockWithCustomName:
       proc `nameProc`*(b: `rtName`): cstring {.cdecl.} =
         b.sb.name()
     else:
@@ -730,7 +651,7 @@ macro chainblock*(blk: untyped; blockName: string; namespaceStr: string = ""; te
       b.sb.exposedVariables()
     proc `requiredVariablesProc`*(b: `rtName`): CBExposedTypesInfo {.cdecl.} =
       b.sb.requiredVariables()
-    when compiles((var x: `blk`; discard x.compose(CBInstanceData()))):
+    when `blk` is BlockWithCompose:
       proc `composeProc`*(b: `rtName`; data: CBInstanceData): CBTypeInfo =
         const msg =  `namespace` & `blockName` & " has compose proc!"
         {.hint: msg.}
@@ -741,7 +662,7 @@ macro chainblock*(blk: untyped; blockName: string; namespaceStr: string = ""; te
       b.sb.setParam(index, val)
     proc `getParamProc`*(b: `rtName`; index: int): CBVar {.cdecl.} =
       b.sb.getParam(index)
-    when compiles((var x: `blk`; x.warmup(nil))):
+    when `blk` is BlockWithWarmup:
       proc `warmupProc`*(b: `rtName`; context: CBContext) {.cdecl.} =
         const msg =  `namespace` & `blockName` & " has warmup proc!"
         {.hint: msg.}
@@ -753,7 +674,7 @@ macro chainblock*(blk: untyped; blockName: string; namespaceStr: string = ""; te
         throwException getCurrentExceptionMsg()
     proc `cleanupProc`*(b: `rtName`) {.cdecl.} =
       b.sb.cleanup()
-    when compiles((var x: `blk`; x.mutate(CBTable()))):
+    when `blk` is BlockWithMutate:
       proc `mutateProc`*(b: `rtName`; options: CBTable) {.cdecl.} =
         const msg =  `namespace` & `blockName` & " has mutate proc!"
         {.hint: msg.}
@@ -774,10 +695,12 @@ macro chainblock*(blk: untyped; blockName: string; namespaceStr: string = ""; te
       result.parameters = cast[CBParametersProc](`parametersProc`.pointer)
       result.setParam = cast[CBSetParamProc](`setParamProc`.pointer)
       result.getParam = cast[CBGetParamProc](`getParamProc`.pointer)
-      when compiles((var x: `blk`; discard x.compose(CBInstanceData()))):
+      when `blk` is BlockWithCompose:
         result.compose = cast[CBComposeProc](`composeProc`.pointer)
-      when compiles((var x: `blk`; x.warmup(nil))):
+      when `blk` is BlockWithWarmup:
         result.warmup = cast[CBWarmupProc](`warmupProc`.pointer)
+      when `blk` is BlockWithMutate:
+        result.mutate = cast[CBMutateProc](`mutateProc`.pointer)
       result.activate = cast[CBActivateProc](`activateProc`.pointer)
       result.cleanup = cast[CBCleanupProc](`cleanupProc`.pointer)
 
@@ -802,13 +725,12 @@ when isMainModule and defined(testing):
     z: Var
     sv: Var = "Hello"
     i: int
-    tab = Core.tableNew()
+    tab = newTableVar()
   y = x
   z = x
   i = z
   tab["test"] = x.CBVar
   echo tab["test"]
-  tab.api[].tableFree(tab)
   echo $(cast[cstring](sv.CBVar.stringValue))
 
   var s: string = sv
