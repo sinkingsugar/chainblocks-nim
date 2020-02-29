@@ -1,3 +1,6 @@
+# TODO
+# Remove nimline, allow pure C builds
+
 import nimline
 import os, macros, typetraits, tables
 
@@ -13,53 +16,53 @@ cppincludes(modulePath & "/../../chainblocks/deps/magic_enum/include")
 type
   FourCC* = distinct int32
 
-  CBBool* {.importcpp: "CBBool", header: "chainblocks.hpp", nodecl.} = bool
-  CBInt* {.importcpp: "CBInt", header: "chainblocks.hpp", nodecl.} = int64
-  CBInt2* {.importcpp: "CBInt2", header: "chainblocks.hpp".} = object
-  CBInt3* {.importcpp: "CBInt3", header: "chainblocks.hpp".} = object 
-  CBInt4* {.importcpp: "CBInt4", header: "chainblocks.hpp".} = object 
-  CBInt8* {.importcpp: "CBInt8", header: "chainblocks.hpp".} = object 
-  CBInt16* {.importcpp: "CBInt16", header: "chainblocks.hpp".} = object 
-  CBFloat* {.importcpp: "CBFloat", header: "chainblocks.hpp".} = float64
-  CBFloat2* {.importcpp: "CBFloat2", header: "chainblocks.hpp".} = object 
-  CBFloat3* {.importcpp: "CBFloat3", header: "chainblocks.hpp".} = object 
-  CBFloat4* {.importcpp: "CBFloat4", header: "chainblocks.hpp".} = object 
-  CBColor* {.importcpp: "CBColor", header: "chainblocks.hpp".} = object
+  CBBool* {.importc: "CBBool", header: "chainblocks.h", nodecl.} = bool
+  CBInt* {.importc: "CBInt", header: "chainblocks.h", nodecl.} = int64
+  CBInt2* {.importc: "CBInt2", header: "chainblocks.h".} = object
+  CBInt3* {.importc: "CBInt3", header: "chainblocks.h".} = object
+  CBInt4* {.importc: "CBInt4", header: "chainblocks.h".} = object
+  CBInt8* {.importc: "CBInt8", header: "chainblocks.h".} = object
+  CBInt16* {.importc: "CBInt16", header: "chainblocks.h".} = object
+  CBFloat* {.importc: "CBFloat", header: "chainblocks.h".} = float64
+  CBFloat2* {.importc: "CBFloat2", header: "chainblocks.h".} = object
+  CBFloat3* {.importc: "CBFloat3", header: "chainblocks.h".} = object
+  CBFloat4* {.importc: "CBFloat4", header: "chainblocks.h".} = object
+  CBColor* {.importc: "CBColor", header: "chainblocks.h".} = object
     r*,g*,b*,a*: uint8
-  CBPointer* {.importcpp: "CBPointer", header: "chainblocks.hpp".} = pointer
-  CBString* {.importcpp: "CBString", header: "chainblocks.hpp".} = object
-  CBSeq* {.importcpp: "CBSeq", header: "chainblocks.hpp".} = object
+  CBPointer* {.importc: "CBPointer", header: "chainblocks.h".} = pointer
+  CBString* {.importc: "CBString", header: "chainblocks.h".} = object
+  CBSeq* {.importc: "CBSeq", header: "chainblocks.h".} = object
     elements*: ptr UncheckedArray[CBVar]
     len*: uint32
     cap*: uint32
-  CBTable* {.importcpp: "CBTable", header: "chainblocks.hpp".} = object
+  CBTable* {.importc: "CBTable", header: "chainblocks.h".} = object
     opaque: pointer
     api: ptr CBTableInterface
-  CBStrings* {.importcpp: "CBStrings", header: "chainblocks.hpp".} = object
+  CBStrings* {.importc: "CBStrings", header: "chainblocks.h".} = object
     elements*: ptr UncheckedArray[CBString]
     len*: uint32
     cap*: uint32
-  CBEnum* {.importcpp: "CBEnum", header: "chainblocks.hpp".} = distinct int32
-  CBChain* {.importcpp: "CBChain", header: "chainblocks.hpp".} = object
+  CBEnum* {.importc: "CBEnum", header: "chainblocks.h".} = distinct int32
+  CBChain* {.importc: "CBChain", header: "chainblocks.h".} = object
   CBChainPtr* = ptr CBChain
-  CBNode* {.importcpp: "CBNode", header: "chainblocks.hpp".} = object
-  CBContextObj* {.importcpp: "CBContext", header: "chainblocks.hpp".} = object
+  CBNode* {.importc: "CBNode", header: "chainblocks.h".} = object
+  CBContextObj* {.importc: "CBContext", header: "chainblocks.h".} = object
   CBContext* = ptr CBContextObj
 
-  CBEnumInfo* {.importcpp: "CBEnumInfo", header: "chainblocks.hpp".} = object
+  CBEnumInfo* {.importc: "CBEnumInfo", header: "chainblocks.h".} = object
     name*: cstring
     labels*: CBStrings
 
-  CBImage* {.importcpp: "CBImage", header: "chainblocks.hpp".} = object
+  CBImage* {.importc: "CBImage", header: "chainblocks.h".} = object
     width*: uint16
     height*: uint16
     channels*: uint8
     flags*: uint8
     data*: ptr UncheckedArray[uint8]
 
-  CBTableForEachCallback {.importcpp: "CBTableForEachCallback", header: "chainblocks.hpp".} = proc(key: cstring; value: ptr CBVar; data: pointer): CBBool {.cdecl.}
+  CBTableForEachCallback {.importc: "CBTableForEachCallback", header: "chainblocks.h".} = proc(key: cstring; value: ptr CBVar; data: pointer): CBBool {.cdecl.}
 
-  CBTableInterface {.importcpp: "CBTableInterface", header: "chainblocks.hpp".} = object
+  CBTableInterface {.importc: "CBTableInterface", header: "chainblocks.h".} = object
     tableForEach: proc(table: CBTable; cb: CBTableForEachCallback; data: pointer) {.cdecl.}
     tableSize: proc(table: CBTable): csize_t {.cdecl.}
     tableContains: proc(table: CBTable; key: cstring): CBBool {.cdecl.}
@@ -68,7 +71,7 @@ type
     tableClear: proc(table: CBTable) {.cdecl.}
     tableFree: proc(table: CBTable) {.cdecl.}
 
-  CBType* {.importcpp: "CBType", header: "chainblocks.hpp", size: sizeof(uint8).} = enum
+  CBType* {.importc: "CBType", header: "chainblocks.h", size: sizeof(uint8).} = enum
     None,
     Any,
     Object,
@@ -106,50 +109,50 @@ type
     keys: CBStrings
     types: CBTypesInfo
       
-  CBTypeInfo* {.importcpp: "CBTypeInfo", header: "chainblocks.hpp".} = object
+  CBTypeInfo* {.importc: "CBTypeInfo", header: "chainblocks.h".} = object
     basicType*: CBType
     seqTypes*: CBTypesInfo
     `object`*: ObjectInfo
     table*: TableInfo
 
-  CBTypesInfo* {.importcpp: "CBTypesInfo", header: "chainblocks.hpp".} = object
+  CBTypesInfo* {.importc: "CBTypesInfo", header: "chainblocks.h".} = object
     elements*: ptr UncheckedArray[CBTypeInfo]
     len*: uint32
     cap*: uint32
 
-  CBObjectInfo* {.importcpp: "CBObjectInfo", header: "chainblocks.hpp".} = object
+  CBObjectInfo* {.importc: "CBObjectInfo", header: "chainblocks.h".} = object
     name*: cstring
 
-  CBParameterInfo* {.importcpp: "CBParameterInfo", header: "chainblocks.hpp".} = object
+  CBParameterInfo* {.importc: "CBParameterInfo", header: "chainblocks.h".} = object
     name*: cstring
     valueTypes*: CBTypesInfo
     help*: cstring
   
-  CBParametersInfo* {.importcpp: "CBParametersInfo", header: "chainblocks.hpp".} = object
+  CBParametersInfo* {.importc: "CBParametersInfo", header: "chainblocks.h".} = object
     elements*: ptr UncheckedArray[CBParameterInfo]
     len*: uint32
     cap*: uint32
 
-  CBExposedTypeInfo* {.importcpp: "CBExposedTypeInfo", header: "chainblocks.hpp".} = object
+  CBExposedTypeInfo* {.importc: "CBExposedTypeInfo", header: "chainblocks.h".} = object
     name*: cstring
     help*: cstring
     exposedType*: CBTypeInfo
 
-  CBExposedTypesInfo* {.importcpp: "CBExposedTypesInfo", header: "chainblocks.hpp".} = object
+  CBExposedTypesInfo* {.importc: "CBExposedTypesInfo", header: "chainblocks.h".} = object
     elements*: ptr UncheckedArray[CBExposedTypeInfo]
     len*: uint32
     cap*: uint32
 
-  CBValidationResult* {.importcpp: "CBValidationResult", header: "chainblocks.hpp".} = object
+  CBValidationResult* {.importc: "CBValidationResult", header: "chainblocks.h".} = object
     outputType*: CBTypeInfo
     exposedInfo*: CBExposedTypesInfo
   
-  CBChainState* {.importcpp: "CBChainState", header: "chainblocks.hpp".} = enum
+  CBChainState* {.importc: "CBChainState", header: "chainblocks.h".} = enum
     Continue, # Even if None returned, continue to next block
     Restart, # Restart the chain from the top
     Stop # Stop the chain execution
 
-  CBVarPayload* {.importcpp: "CBVarPayload", header: "chainblocks.hpp".} = object
+  CBVarPayload* {.importc: "CBVarPayload", header: "chainblocks.h".} = object
     chainState*: CBChainState
     objectValue*: CBPointer
     objectVendorId*: uint32
@@ -176,41 +179,41 @@ type
     enumVendorId*: int32
     enumTypeId*: int32
 
-  CBVar* {.importc: "CBVar", header: "chainblocks.hpp".} = object
+  CBVar* {.importc: "CBVar", header: "chainblocks.h".} = object
     payload*: CBVarPayload
     valueType*: CBType
 
   CBVarConst* = object
     value*: CBVar
 
-  CBNameProc* {.importcpp: "CBNameProc", header: "chainblocks.hpp".} = proc(b: ptr CBlock): cstring {.cdecl.}
-  CBHelpProc* {.importcpp: "CBHelpProc", header: "chainblocks.hpp".} = proc(b: ptr CBlock): cstring {.cdecl.}
+  CBNameProc* {.importc: "CBNameProc", header: "chainblocks.h".} = proc(b: ptr CBlock): cstring {.cdecl.}
+  CBHelpProc* {.importc: "CBHelpProc", header: "chainblocks.h".} = proc(b: ptr CBlock): cstring {.cdecl.}
 
-  CBSetupProc* {.importcpp: "CBSetupProc", header: "chainblocks.hpp".} = proc(b: ptr CBlock) {.cdecl.}
-  CBDestroyProc* {.importcpp: "CBDestroyProc", header: "chainblocks.hpp".} = proc(b: ptr CBlock) {.cdecl.}
+  CBSetupProc* {.importc: "CBSetupProc", header: "chainblocks.h".} = proc(b: ptr CBlock) {.cdecl.}
+  CBDestroyProc* {.importc: "CBDestroyProc", header: "chainblocks.h".} = proc(b: ptr CBlock) {.cdecl.}
 
-  CBPreChainProc* {.importcpp: "CBPreChainProc", header: "chainblocks.hpp".} = proc(b: ptr CBlock; context: CBContext) {.cdecl.}
-  CBPostChainProc* {.importcpp: "CBPostChainProc", header: "chainblocks.hpp".} = proc(b: ptr CBlock; context: CBContext) {.cdecl.}
+  CBPreChainProc* {.importc: "CBPreChainProc", header: "chainblocks.h".} = proc(b: ptr CBlock; context: CBContext) {.cdecl.}
+  CBPostChainProc* {.importc: "CBPostChainProc", header: "chainblocks.h".} = proc(b: ptr CBlock; context: CBContext) {.cdecl.}
 
-  CBInputTypesProc*{.importcpp: "CBInputTypesProc", header: "chainblocks.hpp".}  = proc(b: ptr CBlock): CBTypesInfo {.cdecl.}
-  CBOutputTypesProc* {.importcpp: "CBOutputTypesProc", header: "chainblocks.hpp".} = proc(b: ptr CBlock): CBTypesInfo {.cdecl.}
+  CBInputTypesProc*{.importc: "CBInputTypesProc", header: "chainblocks.h".}  = proc(b: ptr CBlock): CBTypesInfo {.cdecl.}
+  CBOutputTypesProc* {.importc: "CBOutputTypesProc", header: "chainblocks.h".} = proc(b: ptr CBlock): CBTypesInfo {.cdecl.}
 
-  CBExposedVariablesProc* {.importcpp: "CBExposedVariablesProc", header: "chainblocks.hpp".} = proc(b: ptr CBlock): CBExposedTypesInfo {.cdecl.}
-  CBRequiredVariablesProc* {.importcpp: "CBRequiredVariablesProc", header: "chainblocks.hpp".} = proc(b: ptr CBlock): CBExposedTypesInfo {.cdecl.}
+  CBExposedVariablesProc* {.importc: "CBExposedVariablesProc", header: "chainblocks.h".} = proc(b: ptr CBlock): CBExposedTypesInfo {.cdecl.}
+  CBRequiredVariablesProc* {.importc: "CBRequiredVariablesProc", header: "chainblocks.h".} = proc(b: ptr CBlock): CBExposedTypesInfo {.cdecl.}
 
-  CBParametersProc* {.importcpp: "CBParametersProc", header: "chainblocks.hpp".} = proc(b: ptr CBlock): CBParametersInfo {.cdecl.}
-  CBSetParamProc* {.importcpp: "CBSetParamProc", header: "chainblocks.hpp".} = proc(b: ptr CBlock; index: int; val: CBVar) {.cdecl.}
-  CBGetParamProc* {.importcpp: "CBGetParamProc", header: "chainblocks.hpp".} = proc(b: ptr CBlock; index: int): CBVar {.cdecl.}
+  CBParametersProc* {.importc: "CBParametersProc", header: "chainblocks.h".} = proc(b: ptr CBlock): CBParametersInfo {.cdecl.}
+  CBSetParamProc* {.importc: "CBSetParamProc", header: "chainblocks.h".} = proc(b: ptr CBlock; index: int; val: CBVar) {.cdecl.}
+  CBGetParamProc* {.importc: "CBGetParamProc", header: "chainblocks.h".} = proc(b: ptr CBlock; index: int): CBVar {.cdecl.}
 
-  CBComposeProc*{.importcpp: "CBComposeProc", header: "chainblocks.hpp".} = proc(b: ptr CBlock; data: CBInstanceData): CBTypeInfo {.cdecl.}
+  CBComposeProc*{.importc: "CBComposeProc", header: "chainblocks.h".} = proc(b: ptr CBlock; data: CBInstanceData): CBTypeInfo {.cdecl.}
 
-  CBWarmupProc* {.importcpp: "CBWarmupProc", header: "chainblocks.hpp".} = proc(b: ptr CBlock; context: CBContext) {.cdecl.}
-  CBActivateProc* {.importcpp: "CBActivateProc", header: "chainblocks.hpp".} = proc(b: ptr CBlock; context: CBContext; input: CBVar): CBVar {.cdecl.}
-  CBCleanupProc* {.importcpp: "CBCleanupProc", header: "chainblocks.hpp".} = proc(b: ptr CBlock) {.cdecl.}
+  CBWarmupProc* {.importc: "CBWarmupProc", header: "chainblocks.h".} = proc(b: ptr CBlock; context: CBContext) {.cdecl.}
+  CBActivateProc* {.importc: "CBActivateProc", header: "chainblocks.h".} = proc(b: ptr CBlock; context: CBContext; input: CBVar): CBVar {.cdecl.}
+  CBCleanupProc* {.importc: "CBCleanupProc", header: "chainblocks.h".} = proc(b: ptr CBlock) {.cdecl.}
 
-  CBMutateProc* {.importcpp: "CBMutateProc", header: "chainblocks.hpp".} = proc(b: ptr CBlock; options: CBTable) {.cdecl.}
+  CBMutateProc* {.importc: "CBMutateProc", header: "chainblocks.h".} = proc(b: ptr CBlock; options: CBTable) {.cdecl.}
 
-  CBlock* {.importcpp: "CBlock", header: "chainblocks.hpp".} = object
+  CBlock* {.importc: "CBlock", header: "chainblocks.h".} = object
     inlineBlockId*: uint8
     
     name*: CBNameProc
@@ -240,17 +243,17 @@ type
 
     mutate*: CBMutateProc
 
-  CBBlockConstructor* {.importcpp: "CBBlockConstructor", header: "chainblocks.hpp".} = proc(): ptr CBlock {.cdecl.}
+  CBBlockConstructor* {.importc: "CBBlockConstructor", header: "chainblocks.h".} = proc(): ptr CBlock {.cdecl.}
  
-  CBlocks* {.importcpp: "CBlocks", header: "chainblocks.hpp".} = object
+  CBlocks* {.importc: "CBlocks", header: "chainblocks.h".} = object
     elements*: ptr UncheckedArray[CBlock]
     len*: uint32
     cap*: uint32
 
-  CBCallback* {.importcpp: "CBCallback", header: "chainblocks.hpp".} = proc(): void {.cdecl.}
+  CBCallback* {.importc: "CBCallback", header: "chainblocks.h".} = proc(): void {.cdecl.}
 
-  CBInstanceData* {.importcpp: "CBInstanceData", header: "chainblocks.hpp".} = object
-    self {.importcpp: "block"}: ptr CBlock
+  CBInstanceData* {.importc: "CBInstanceData", header: "chainblocks.h".} = object
+    self {.importc: "block"}: ptr CBlock
     inputType*: CBTypeInfo
     stack*: CBTypesInfo
     shared*: CBExposedTypesInfo
@@ -657,12 +660,6 @@ proc activate*(b: auto; context: CBContext; input: CBVar): CBVar =
   const msg = typedesc[type(b)].name & " is using default activate proc"
   {.warning: msg.}
 
-# Allocators using cpp to properly construct in C++ fashion (we have some blocks that need this)
-template cppnew*(pt, typ1, typ2: untyped): untyped = emitc(`pt`, " = reinterpret_cast<", `typ1`, "*>(new ", `typ2`, "());")
-template cppnew*(pt, typ1, typ2, a1: untyped): untyped = emitc(`pt`, " = reinterpret_cast<", `typ1`, "*>(new ", `typ2`, "(", `a1`, "));")
-template cppnew*(pt, typ1, typ2, a1, a2: untyped): untyped = emitc(`pt`, " = reinterpret_cast<", `typ1`, "*>(new ", `typ2`, "(", `a1`, ", ", `a2`, "));")
-template cppnew*(pt, typ1, typ2, a1, a2, a3: untyped): untyped = emitc(`pt`, " = reinterpret_cast<", `typ1`, "*>(new ", `typ2`, "(", `a1`, ", ", `a2`, ", ", `a3`, "));")
-template cppdel*(pt: untyped): untyped = emitc("delete ", `pt`, ";")
 proc throwCBException*(msg: string) = emitc("throw chainblocks::CBException(", `msg`.cstring, ");")
 proc throwCBException*(msg: cstring) = emitc("throw chainblocks::CBException(", `msg`, ");")
 
@@ -714,7 +711,6 @@ macro chainblock*(blk: untyped; blockName: string; namespaceStr: string = ""; te
         sb: `blk`
       
       `rtName`* = ptr `rtNameValue`
-    
 
     when compiles((var x: `blk`; discard x.name())):
       proc `nameProc`*(b: `rtName`): cstring {.cdecl.} =
@@ -731,7 +727,7 @@ macro chainblock*(blk: untyped; blockName: string; namespaceStr: string = ""; te
     proc `destroyProc`*(b: `rtName`) {.cdecl.} =
       b.sb.destroy()
       callDestroy(b.sb)
-      cppdel(b)
+      dealloc(b)
     proc `inputTypesProc`*(b: `rtName`): CBTypesInfo {.cdecl.} =
       b.sb.inputTypes()
     proc `outputTypesProc`*(b: `rtName`): CBTypesInfo {.cdecl.} =
@@ -770,9 +766,7 @@ macro chainblock*(blk: untyped; blockName: string; namespaceStr: string = ""; te
         b.sb.mutate(options)
     
     registerBlock(`namespace` & `blockName`) do -> ptr CBlock {.cdecl.}:
-      # https://stackoverflow.com/questions/7546620/operator-new-initializes-memory-to-zero
-      # Memory will be memset to 0x0, because we call T()
-      cppnew(result, CBlock, `rtNameValue`)
+      result = cast[ptr CBlock](alloc0(sizeof(`rtNameValue`)))
       # DO NOT CHANGE THE FOLLOWING, this sorcery is needed to build with msvc 19ish
       # Moreover it's kinda nim's fault, as it won't generate a C cast without `.pointer`
       result.name = cast[CBNameProc](`nameProc`.pointer)
