@@ -367,19 +367,22 @@ proc release*(v: ptr CBVar) {.inline.} = Core.releaseVariable(v)
 
 include varsugar
   
-type SupportedTypes = seq[CBVar] | SomeFloat | SomeInteger
+type SupportedTypes = seq[CBVar] | SomeFloat | SomeInteger | array[3, int32] | array[4, int32] | array[2, float64]
+
 
 proc intoCBVar*[T](value: T): CBVar =
   zeroMem(addr result, sizeof(CBVar))
 
   when T is SomeInteger:
     result.valueType = CBType.Int
-    assert T.high <= int64.high
+    static:
+      assert T.high <= int64.high
     result.intValue = value.int64
 
   when T is SomeFloat:
     result.valueType = CBType.Float
-    assert T.high <= float64.high
+    static:
+      assert T.high <= float64.high
     result.floatValue = value.float64
 
   when T is seq[CBVar]:
@@ -388,6 +391,18 @@ proc intoCBVar*[T](value: T): CBVar =
     result.seqValue.len = value.len.uint32
     result.seqValue.cap = 0
     result.seqValue.elements = cast[ptr UncheckedArray[CBVar]](unsafeaddr value[0])
+
+  when T is array[3, int32]:
+    result.valueType = CBType.Int3
+    copyMem(addr result.int3Value, unsafeaddr value[0], sizeof(T))
+
+  when T is array[4, int32]:
+    result.valueType = CBType.Int4
+    copyMem(addr result.int4Value, unsafeaddr value[0], sizeof(T))
+
+  when T is array[2, float64]:
+    result.valueType = CBType.Float2
+    copyMem(addr result.float2Value, unsafeaddr value[0], sizeof(T))
 
   # else, won't work it seems
   when T isnot SupportedTypes:
