@@ -40,15 +40,32 @@ proc build(filename: string; features: set[Features] = {}) =
   if Run in features:
     cmd &= " --passL:-lstdc++ "
     cmd &= " -r --passL:-L../chainblocks/build --passL:-lcb_static "
+    cmd &= """ --passL:../chainblocks/deps/snappy/build/libsnappy.a """
     when defined windows:
       cmd &= " --passL:-fuse-ld=lld "
       cmd &= """ --passL:"-lboost_context-mt -lboost_filesystem-mt -lntdll -lOle32 -lImm32 -lWinmm -lGdi32 -lVersion -lOleAut32 -lSetupAPI -lPsapi -lD3D11 -lDXGI -lws2_32" """
-      cmd &= """ --passL:../chainblocks/deps/snappy/build/libsnappy.a """
       if FullDeps in features:
         cmd &= """ --passL:../chainblocks/deps/bimg/.build/win64_mingw-gcc/bin/libbimgRelease.a """
         cmd &= """ --passL:../chainblocks/external/SDL2-2.0.10/x86_64-w64-mingw32/lib/libSDL2.a """
     elif defined linux:
       cmd &= """ --passL:"-lboost_context -pthread -ldl -lrt" """
+    elif defined osx:
+      cmd &= " --passL:-L/usr/local/lib "
+      cmd &= " --passL:-lboost_context-mt "
+      if FullDeps in features:
+        cmd &= """ --passL:"-framework Foundation" """
+        cmd &= """ --passL:"-framework Cocoa" """
+        cmd &= """ --passL:"-framework CoreAudio" """
+        cmd &= """ --passL:"-framework AudioToolbox" """
+        cmd &= """ --passL:"-framework CoreVideo" """
+        cmd &= """ --passL:"-framework ForceFeedback" """
+        cmd &= """ --passL:"-framework IOKit" """
+        cmd &= """ --passL:"-framework Carbon" """
+        cmd &= """ --passL:"-framework QuartzCore" """
+        cmd &= """ --passL:"-framework Metal" """
+        cmd &= """ --passL:../chainblocks/deps/bimg/.build/osx64_clang/bin/libbimgRelease.a """
+        cmd &= """ --passL:../chainblocks/external/SDL2-2.0.10/build/libSDL2.a """
+        cmd &= " --passL:-liconv "
   if StaticLib in features:
     cmd &= " --app:staticlib -d:auto_nim_main --noMain -o:" & name & ".a "
   if Test in features:

@@ -772,6 +772,7 @@ when isMainModule and defined(testing):
     echo se.pop().CBVar
     se[0] = move(s3)
 
+  echo "done"
 
   proc inputTypes*(b: var CBPow2Block): CBTypesInfo = AnyTypes
   proc outputTypes*(b: var CBPow2Block): CBTypesInfo = AnyTypes
