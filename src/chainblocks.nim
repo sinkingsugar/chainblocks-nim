@@ -115,6 +115,8 @@ type
 
   CBObjectInfo* {.importc: "CBObjectInfo", header: "chainblocks.h".} = object
     name*: cstring
+    reference*: proc(p: pointer) {.cdecl.}
+    release*: proc(p: pointer) {.cdecl.}
 
   CBParameterInfo* {.importc: "struct CBParameterInfo", header: "chainblocks.h".} = object
     name*: cstring
@@ -261,6 +263,7 @@ type
     seqSlowDelete: proc(s: ptr CBSeq; idx: uint32) {.cdecl.}
     seqInsert: proc(s: ptr CBSeq; idx: uint32; val: ptr CBVar) {.cdecl.}
     seqPop: proc(s: ptr CBSeq): CBVar {.cdecl.}
+    log: proc(msg: cstring) {.cdecl.}
 
   TCBArrays = CBSeq | CBStrings | CBlocks | CBTypesInfo | CBExposedTypesInfo | CBParametersInfo
 
@@ -421,6 +424,8 @@ proc info*(
   t: static[CBType],
   vendorId: uint32 = 0,
   typeId: uint32 = 0,
+  objectReference: proc(p: pointer) {.cdecl.} = nil,
+  objectRelease: proc(p: pointer) {.cdecl.} = nil,
   seqTypes: openarray[CBTypeInfo] = [],
   tableKeys: openarray[cstring] = [],
   tableTypes: openarray[CBTypeInfo] = []): CBTypeInfo =
@@ -603,6 +608,8 @@ proc registerBlock*(name: cstring; initProc: CBBlockConstructor) {.inline.} = Co
 proc callDestroy*[T](obj: var T) = `=destroy`(obj)
 
 proc throwException*(msg: cstring) {.inline.} = Core.throwException(msg)
+
+proc log*(msg: cstring) {.inline.} = Core.log(msg)
 
 macro chainblock*(blk: untyped; blockName: string; namespaceStr: string = ""; testCode: untyped = nil): untyped =
   var
