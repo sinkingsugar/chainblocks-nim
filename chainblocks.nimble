@@ -13,7 +13,7 @@ backend       = "cpp"
 requires "nim >= 1.0.6"
 requires "nimline >= 0.1.7"
 
-import chainblocks/buildtools
+import src/chainblocks/buildtools
 
 task compile, "Build all":
   exec build("src/chainblocks.nim")
