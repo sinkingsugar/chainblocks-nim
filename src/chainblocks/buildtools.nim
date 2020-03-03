@@ -12,11 +12,12 @@ type
     Run,
     Test,
     Release,
-    GdbDebug,
+    CDebug,
     StaticLib,
     NoNimTraces,
     FullDeps
     CppBuild
+    Trace
 
 proc build*(filename: string; features: set[Features] = {}): string =
   var (_, name, _) = splitFile(filename)
@@ -28,6 +29,8 @@ proc build*(filename: string; features: set[Features] = {}): string =
   cmd &= " --gc:arc"
   if Release in features:
     cmd &= " -d:danger "
+  if Trace in features:
+    cmd &= " -d:TRACE "
   if Run in features:
     cmd &= " --passL:-lstdc++ "
     if cblibpathEnv.len > 0:
@@ -64,7 +67,7 @@ proc build*(filename: string; features: set[Features] = {}): string =
     cmd &= " --app:staticlib -d:auto_nim_main --noMain -o:" & name & ".a "
   if Test in features:
     cmd &= " -d:testing "
-  if GdbDebug in features:
+  if CDebug in features:
     cmd &= " --passC:-g "
   elif Release notin features:
     cmd &= " --debugger:native "

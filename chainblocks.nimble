@@ -28,7 +28,7 @@ task testfull, "Build all":
   exec build("src/chainblocks.nim", {Run, Test, FullDeps})
 
 task gdb, "Build all":
-  exec build("src/chainblocks.nim", {Run, Test, GdbDebug})
+  exec build("src/chainblocks.nim", {Run, Test, CDebug})
 
 task libs, "Build static libs":
   exec build("src/chainblocks.nim", {StaticLib})
