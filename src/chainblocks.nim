@@ -374,7 +374,7 @@ proc suspend*(context: CBContext; seconds: float64): CBVar {.inline.} =
 proc reference*(name: cstring; context: CBContext): ptr CBVar {.inline.} = Core.referenceVariable(context, name)
 proc release*(v: ptr CBVar) {.inline.} = Core.releaseVariable(v)
 
-include varsugar
+include chainblocks/varsugar
   
 type SupportedTypes = seq[CBVar] | SomeFloat | SomeInteger | array[3, int32] | array[4, int32] | array[2, float64]
 
