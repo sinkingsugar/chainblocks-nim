@@ -95,8 +95,8 @@ type
 
   # exportc to avoid mangling
   ObjectInfo* {.exportc.} = object
-    vendorId: uint32
-    typeId: uint32
+    vendorId: FourCC
+    typeId: FourCC
 
   TableInfo* {.exportc.} = object
     keys: CBStrings
@@ -113,8 +113,11 @@ type
     len*: uint32
     cap*: uint32
 
-  CBObjectInfo* {.importc: "CBObjectInfo", header: "chainblocks.h".} = object
+  CBObjectInfo* {.importc: "struct CBObjectInfo", header: "chainblocks.h".} = object
     name*: cstring
+    serialize*: proc(p: pointer, data: ptr ptr uint8, dataLen: ptr csize_t, handle: ptr CBPointer): CBBool {.cdecl.}
+    free*: proc(handle: CBPointer) {.cdecl.}
+    deserialize*: proc(data: ptr UncheckedArray[uint8], dataLen: ptr csize_t): pointer {.cdecl.}
     reference*: proc(p: pointer) {.cdecl.}
     release*: proc(p: pointer) {.cdecl.}
 
@@ -150,8 +153,8 @@ type
   CBVarPayload* {.importc: "struct CBVarPayload", header: "chainblocks.h".} = object
     chainState*: CBChainState
     objectValue*: CBPointer
-    objectVendorId*: uint32
-    objectTypeId*: uint32
+    objectVendorId*: FourCC
+    objectTypeId*: FourCC
     boolValue*: bool
     intValue*: CBInt
     int2Value*: CBInt2
@@ -242,19 +245,20 @@ type
   CBCallback* {.importc: "CBCallback", header: "chainblocks.h".} = proc(): void {.cdecl.}
 
   CBInstanceData* {.importc: "struct CBInstanceData", header: "chainblocks.h".} = object
-    self {.importc: "block"}: ptr CBlock
+    self* {.importc: "block"}: ptr CBlock
     inputType*: CBTypeInfo
     stack*: CBTypesInfo
     shared*: CBExposedTypesInfo
 
   CBCore* {.importc: "struct CBCore", header: "chainblocks.h".} = object
-    tableNew*: proc(): CBTable {.cdecl.}
+    tableNew: proc(): CBTable {.cdecl.}
     cloneVar: proc(dst: pointer; src: pointer) {.cdecl.}
     destroyVar: proc(v: pointer) {.cdecl.}
     suspend: proc(ctx: CBContext; seconds: float64): CBVar {.cdecl.}
     referenceVariable: proc(ctx: CBContext; name: cstring): ptr CBVar {.cdecl.}
     releaseVariable: proc(v: ptr CBVar) {.cdecl.}
     registerBlock: proc(name: cstring; ctor: CBBlockConstructor) {.cdecl.}
+    registerObjectType: proc(vendorId, typeId: int32; info: CBObjectInfo) {.cdecl.}
     throwException: proc(msg: cstring) {.cdecl.}
     seqFree: proc(s: ptr CBSeq) {.cdecl.}
     seqPush: proc(s: ptr CBSeq; val: ptr CBVar) {.cdecl.}
@@ -268,6 +272,8 @@ type
   TCBArrays = CBSeq | CBStrings | CBlocks | CBTypesInfo | CBExposedTypesInfo | CBParametersInfo
 
   Var* = distinct CBVar
+
+proc `==`*(a, b: FourCC): bool {.borrow.}
 
 const
   ABI_VERSION = 0x20200101
@@ -422,10 +428,8 @@ proc toFourCC*(str: string): FourCC {.compileTime.} =
 
 proc info*(
   t: static[CBType],
-  vendorId: uint32 = 0,
-  typeId: uint32 = 0,
-  objectReference: proc(p: pointer) {.cdecl.} = nil,
-  objectRelease: proc(p: pointer) {.cdecl.} = nil,
+  vendorId: FourCC = 0.FourCC,
+  typeId: FourCC = 0.FourCC,
   seqTypes: openarray[CBTypeInfo] = [],
   tableKeys: openarray[cstring] = [],
   tableTypes: openarray[CBTypeInfo] = []): CBTypeInfo =
@@ -460,7 +464,7 @@ proc info*(
     else:
       result = CBTypeInfo(basicType: CBType.Seq)
   when t == CBType.Object:
-    result = CBTypeInfo(basicType: CBType.Object, `object`: ObjectInfo(vendorId: vendorId, typeId: typeId)) 
+    result = CBTypeInfo(basicType: CBType.Object, `object`: ObjectInfo(vendorId: vendorId, typeId: typeId))
   else:
     result = CBTypeInfo(basicType: t)
 
@@ -604,6 +608,7 @@ proc activate*(b: auto; context: CBContext; input: CBVar): CBVar =
   {.warning: msg.}
 
 proc registerBlock*(name: cstring; initProc: CBBlockConstructor) {.inline.} = Core.registerBlock(name, initProc)
+proc registerObjectType*(vendorId, typeId: FourCC; info: CBObjectInfo) {.inline.} = Core.registerObjectType(vendorId.int32, typeId.int32, info)
 
 proc callDestroy*[T](obj: var T) = `=destroy`(obj)
 
@@ -776,7 +781,7 @@ when isMainModule and defined(testing):
     pms = CBParametersInfo.unsafeFrom(pmsa)
 
   let
-    sinkCC = "sink".toFourCC.uint32
+    sinkCC = "sink".toFourCC
     sharedNetworkInfo = CBType.Object.info(vendorId = sinkCC)
     intVar = 10.intoCBVar
   var
