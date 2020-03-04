@@ -240,7 +240,7 @@ type
   CBBlockConstructor* {.importc: "CBBlockConstructor", header: "chainblocks.h".} = proc(): ptr CBlock {.cdecl.}
  
   CBlocks* {.importc: "CBlocks", header: "chainblocks.h".} = object
-    elements*: ptr UncheckedArray[CBlock]
+    elements*: ptr UncheckedArray[CBlockPtr]
     len*: uint32
     cap*: uint32
 
@@ -760,7 +760,7 @@ proc Block(chain: ChainInfo, name: string; params: varargs[Var]): ChainInfo =
 proc Run(info: ChainInfo): Var {.discardable.} =
   let
     blocks = CBlocks(
-      elements: cast[ptr UncheckedArray[CBlock]](info.blocks[0].unsafeaddr),
+      elements: cast[ptr UncheckedArray[CBlockPtr]](info.blocks[0].unsafeaddr),
       len: info.blocks.len.uint32,
       cap: 0
     )
