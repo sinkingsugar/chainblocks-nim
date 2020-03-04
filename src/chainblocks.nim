@@ -176,6 +176,7 @@ type
     enumValue*: CBEnum
     enumVendorId*: int32
     enumTypeId*: int32
+    stackIndexValue*: int32
 
   CBVar* {.importc: "struct CBVar", header: "chainblocks.h".} = object
     payload*: CBVarPayload
@@ -283,10 +284,16 @@ type
     schedule: proc(node: ptr CBNode; chain: CBChainPtr) {.cdecl.}
     tick: proc(node: ptr CBNode): CBBool {.cdecl.}
     sleep: proc(seconds: float64; runCallbacks: CBBool) {.cdecl.}
+    getStack: proc(ctx: CBContext): ptr CBSeq {.cdecl.}
 
   TCBArrays = CBSeq | CBStrings | CBlocks | CBTypesInfo | CBExposedTypesInfo | CBParametersInfo
 
   Var* = distinct CBVar
+
+  ParamVar* = object
+    v: CBVar
+    cp: ptr CBVar
+    stack: ptr CBSeq
 
 proc `==`*(a, b: FourCC): bool {.borrow.}
 
@@ -302,6 +309,11 @@ let
 
 proc `=destroy`(v: var Var) {.inline.} =
   Core.destroyVar(addr v)
+
+proc `=destroy`(v: var ParamVar) {.inline.} =
+  if v.v.valueType == CBType.ContextVar and v.cp != nil:
+    Core.releaseVariable(v.cp)
+  Core.destroyVar(addr v.v)
 
 proc `=`(dst: var Var; source: Var) {.inline.} =
   zeroMem(addr dst, sizeof(CBVar))
@@ -346,7 +358,6 @@ proc release*(v: ptr CBVar) {.inline.} = Core.releaseVariable(v)
 include chainblocks/varsugar
   
 type SupportedTypes = seq[CBVar] | SomeFloat | SomeInteger | array[3, int32] | array[4, int32] | array[2, float64]
-
 
 proc intoCBVar*[T](value: T): CBVar =
   zeroMem(addr result, sizeof(CBVar))

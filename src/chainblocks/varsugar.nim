@@ -72,6 +72,7 @@ template blockValue*(v: CBVar): auto = v.payload.blockValue
 template enumValue*(v: CBVar): auto = v.payload.enumValue
 template enumVendorId*(v: CBVar): auto = v.payload.enumVendorId
 template enumTypeId*(v: CBVar): auto = v.payload.enumTypeId
+template stackIndexValue*(v: CBVar): auto = v.payload.stackIndexValue
 
 template valueType*(v: Var): auto = v.CBVar.valueType
 template chainState*(v: Var): auto = v.CBVar.payload.chainState
@@ -100,6 +101,7 @@ template blockValue*(v: Var): auto = v.CBVar.payload.blockValue
 template enumValue*(v: Var): auto = v.CBVar.payload.enumValue
 template enumVendorId*(v: Var): auto = v.CBVar.payload.enumVendorId
 template enumTypeId*(v: Var): auto = v.CBVar.payload.enumTypeId
+template stackIndexValue*(v: Var): auto = v.CBVar.payload.stackIndexValue
 
 template valueType*(v: CBVarConst): auto = v.value.valueType
 template chainState*(v: CBVarConst): auto = v.value.payload.chainState
@@ -155,6 +157,7 @@ template `blockValue=`*(v: CBVar, val: auto) = v.payload.blockValue = val
 template `enumValue=`*(v: CBVar, val: auto) = v.payload.enumValue = val
 template `enumVendorId=`*(v: CBVar, val: auto) = v.payload.enumVendorId = val
 template `enumTypeId=`*(v: CBVar, val: auto) = v.payload.enumTypeId = val
+template `stackIndexValue=`*(v: CBVar, val: auto) = v.payload.stackIndexValue = val
 
 template `valueType=`*(v: Var, val: auto) = v.CBVar.valueType = val
 template `chainState=`*(v: Var, val: auto) = v.CBVar.payload.chainState = val
@@ -284,3 +287,30 @@ proc `[]=`*(v: var Var; index: int; value: sink Var) {.inline.} =
   assert index < v.seqValue.len.int
   v.seqValue.elements[index] = value.CBVar
   wasMoved(value)
+
+# ParamVar
+
+converter toParamVar*(v: CBVar): ParamVar {.inline.} =
+  Core.cloneVar(addr result.v, unsafeaddr v)
+
+converter toCBVar*(pv: ParamVar): CBVar {.inline.} = pv.v
+
+proc cleanup*(pv: var ParamVar) {.inline.} =
+  if pv.cp != nil:
+    Core.releaseVariable(pv.cp)
+    pv.cp = nil
+  pv.stack = nil
+
+proc warmup*(pv: var ParamVar; ctx: CBContext) {.inline.} =
+  if pv.v.valueType == CBType.ContextVar and pv.cp == nil:
+    pv.cp = Core.referenceVariable(ctx, cast[cstring](pv.v.stringValue))
+  elif pv.v.valueType == CBType.StackIndex and pv.stack == nil:
+    pv.stack = Core.getStack(ctx)
+
+proc get*(pv: var ParamVar): var CBVar {.inline.} =
+  if pv.v.valueType == CBType.ContextVar:
+    return pv.cp[]
+  elif pv.v.valueType == CBType.StackIndex:
+    return pv.stack[].elements[(pv.stack[].len.int64 - 1) - pv.v.stackIndexValue.int64]
+  else:
+    return pv.v
