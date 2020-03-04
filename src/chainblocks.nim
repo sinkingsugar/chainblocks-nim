@@ -67,7 +67,6 @@ type
   CBType* {.importc: "CBType", header: "chainblocks.h", size: sizeof(uint8), pure.} = enum
     None,
     Any,
-    Object,
     Enum,
     Bool,
     Int,        # A 64bits int
@@ -81,10 +80,9 @@ type
     Float3,     # A vector of 3 32bits floats
     Float4,     # A vector of 4 32bits floats
     Color,      # A vector of 4 uint8
-    Chain,      # sub chains, e.g. IF/ELSE
     Block,      # a block, useful for future introspection blocks!
-    StackIndex, # an index in the stack, used as cheap ContextV
-    EndOfBlittableTypes = 50, # anything below this is not considerd blittable
+    StackIndex, # an index in the stack, used as cheap ContextVar
+    EndOfBlittableTypes = 50, # anything below this is not blittable (ish)
     Bytes, # pointer + size
     String,
     Path,       # An OS filesystem path
@@ -92,6 +90,8 @@ type
     Image,
     Seq,
     Table,
+    Chain,
+    Object,
 
   # exportc to avoid mangling
   ObjectInfo* {.exportc.} = object
@@ -197,8 +197,8 @@ type
   CBRequiredVariablesProc* {.importc: "CBRequiredVariablesProc", header: "chainblocks.h".} = proc(b: ptr CBlock): CBExposedTypesInfo {.cdecl.}
 
   CBParametersProc* {.importc: "CBParametersProc", header: "chainblocks.h".} = proc(b: ptr CBlock): CBParametersInfo {.cdecl.}
-  CBSetParamProc* {.importc: "CBSetParamProc", header: "chainblocks.h".} = proc(b: ptr CBlock; index: int; val: CBVar) {.cdecl.}
-  CBGetParamProc* {.importc: "CBGetParamProc", header: "chainblocks.h".} = proc(b: ptr CBlock; index: int): CBVar {.cdecl.}
+  CBSetParamProc* {.importc: "CBSetParamProc", header: "chainblocks.h".} = proc(b: ptr CBlock; index: cint; val: CBVar) {.cdecl.}
+  CBGetParamProc* {.importc: "CBGetParamProc", header: "chainblocks.h".} = proc(b: ptr CBlock; index: cint): CBVar {.cdecl.}
 
   CBComposeProc*{.importc: "CBComposeProc", header: "chainblocks.h".} = proc(b: ptr CBlock; data: CBInstanceData): CBTypeInfo {.cdecl.}
 
@@ -252,6 +252,8 @@ type
     stack*: CBTypesInfo
     shared*: CBExposedTypesInfo
 
+  CBValidationCallback = proc(blk: CBlockPtr; errormsg: cstring; nonfatal: CBBool; data: pointer) {.cdecl.}
+
   CBCore* {.importc: "struct CBCore", header: "chainblocks.h".} = object
     tableNew: proc(): CBTable {.cdecl.}
     cloneVar: proc(dst: pointer; src: pointer) {.cdecl.}
@@ -263,6 +265,7 @@ type
     registerObjectType: proc(vendorId, typeId: int32; info: CBObjectInfo) {.cdecl.}
     throwException: proc(msg: cstring) {.cdecl.}
     seqFree: proc(s: ptr CBSeq) {.cdecl.}
+    expTypesFree: proc(s: ptr CBExposedTypesInfo) {.cdecl.}
     seqPush: proc(s: ptr CBSeq; val: ptr CBVar) {.cdecl.}
     seqResize: proc(s: ptr CBSeq; size: uint32) {.cdecl.}
     seqFastDelete: proc(s: ptr CBSeq; idx: uint32) {.cdecl.}
@@ -270,6 +273,16 @@ type
     seqInsert: proc(s: ptr CBSeq; idx: uint32; val: ptr CBVar) {.cdecl.}
     seqPop: proc(s: ptr CBSeq): CBVar {.cdecl.}
     log: proc(msg: cstring) {.cdecl.}
+    createBlock: proc(name: cstring): CBlockPtr {.cdecl.}
+    validateSetParam: proc(blk: CBlockPtr; index: cint; param: CBVar; cb: CBValidationCallback; data: pointer): CBBool {.cdecl.}
+    createChain: proc(name: cstring; blocks: CBlocks; looped, unsafe: CBBool): CBChainPtr {.cdecl.}
+    destroyChain: proc(chain: CBChainPtr) {.cdecl.}
+    validateChain: proc(chain: CBChainPtr; cb: CBValidationCallback; userData: pointer; data: CBInstanceData): CBValidationResult {.cdecl.}
+    createNode: proc(): ptr CBNode {.cdecl.}
+    destroyNode: proc(node: ptr CBNode) {.cdecl.}
+    schedule: proc(node: ptr CBNode; chain: CBChainPtr) {.cdecl.}
+    tick: proc(node: ptr CBNode): CBBool {.cdecl.}
+    sleep: proc(seconds: float64; runCallbacks: CBBool) {.cdecl.}
 
   TCBArrays = CBSeq | CBStrings | CBlocks | CBTypesInfo | CBExposedTypesInfo | CBParametersInfo
 
@@ -699,35 +712,75 @@ macro chainblock*(blk: untyped; blockName: string; namespaceStr: string = ""; te
 
 # must link like -Wl,--whole-archive -lhttp -Wl,--no-whole-archive
 
+type
+  ChainInfo = object
+    name: string
+    looped: bool
+    unsafe: bool
+    blocks: seq[CBlockPtr]
+
 proc Chain(
-  name: string = "",
+  name: string,
   looped: bool = false,
-  unsafe: bool = false): ptr CBChain =
-  discard
+  unsafe: bool = false): ChainInfo =
+  result = ChainInfo(
+    name: name,
+    looped: looped,
+    unsafe: unsafe
+  )
 
-proc Msg(message: Var): seq[ptr CBlock] =
-  # create
-  # setup
-  # setparam
-  # add to chain
-  # return chain
-  discard
+proc Block(name: string; params: varargs[Var]): seq[ptr CBlock] =
+  let
+    blk = Core.createBlock(name.cstring)
+  doAssert blk != nil, "Failed to create block: " & name
 
-proc Msg(blks: seq[ptr CBlock], message: Var): seq[ptr CBlock] =
-  # create
-  # setup
-  # setparam
-  # add to chain
-  # return chain
-  discard
+  blk.setup(blk)
 
-proc Msg(chain: ptr CBChain, message: Var): ptr CBChain =
-  # create
-  # setup
-  # setparam
-  # add to chain
-  # return chain
-  discard
+  let paramInfos = blk.parameters(blk)
+
+  var i = 0
+  for param in params:
+    let cb: CBValidationCallback = proc(blk: CBlockPtr; errormsg: cstring; nonfatal: CBBool; data: pointer) {.cdecl.} =
+      Core.log(errormsg)
+    doAssert Core.validateSetParam(blk, i.cint, param.CBVar, cb, nil), "Failed block set param validation: " & name & " param: " & $(paramInfos.elements[i].name)
+
+    blk.setParam(blk, i.cint, param.CBVar)
+
+    inc i
+  return @[blk]
+
+proc Block(blks: seq[ptr CBlock]; name: string; params: varargs[Var]): seq[ptr CBlock] =
+  result = blks
+  result.add(Block(name, params)[0])
+
+proc Block(chain: ChainInfo, name: string; params: varargs[Var]): ChainInfo =
+  result = chain
+  result.blocks.add(Block(name, params)[0])
+
+proc Run(info: ChainInfo): Var {.discardable.} =
+  let
+    blocks = CBlocks(
+      elements: cast[ptr UncheckedArray[CBlock]](info.blocks[0].unsafeaddr),
+      len: info.blocks.len.uint32,
+      cap: 0
+    )
+    chain = Core.createChain(info.name, blocks, info.looped, info.unsafe)
+    cb: CBValidationCallback = proc(blk: CBlockPtr; errormsg: cstring; nonfatal: CBBool; data: pointer) {.cdecl.} =
+      doAssert nonfatal, "Fatal error during chain validation: " & $errormsg & " block: " & $(blk.name(blk))
+    validation = Core.validateChain(chain, cb, nil, CBInstanceData())
+
+  Core.expTypesFree(validation.exposedInfo.unsafeaddr)
+
+  let
+    node = Core.createNode()
+
+  Core.schedule(node, chain)
+
+  while Core.tick(node):
+    Core.sleep(0, true)
+
+  Core.destroyChain(chain)
+  Core.destroyNode(node)
 
 when isMainModule and defined(testing):
   type
@@ -760,12 +813,14 @@ when isMainModule and defined(testing):
 
   var s: string = sv
 
-  let c =
-    Chain()
-    .Msg(
-      message = "Hello"
-    )
-    .Msg("World")
+  Chain("test")
+  .Block("Msg", "Hello")
+  .Block("Msg", "World")
+  .Block("Log")
+  .Block("Const", 10)
+  .Block("Math.Add", 10)
+  .Block("Log")
+  .Run()
 
   let
     info1 = CBType.Object.info()

@@ -3,8 +3,8 @@ converter toVar*(v: CBVar): Var {.inline.} =
 
 macro generateVarConverter(nimVal, cbType, cbVal: untyped): untyped =
   let
-    toName = ident("convertToCB" & $cbType)
-    fromName = ident("convertFromCB" & $cbType)
+    toName = ident("convertFromCB" & $cbType)
+    fromName = ident("convertToCB" & $cbType)
 
   return quote do:
     converter `toName`*(v: var Var): `nimVal` {.inline.} =
@@ -17,7 +17,7 @@ macro generateVarConverter(nimVal, cbType, cbVal: untyped): untyped =
       assert v.CBVar.valueType == CBType.`cbType`
       v.CBVar.payload.`cbVal`.`nimVal`
 
-    converter `fromName`*(v: int): Var {.inline.} =
+    converter `fromName`*(v: `nimVal`): Var {.inline.} =
       type outputType = typeof(result.CBVar.payload.`cbVal`)
       result.CBVar.valueType = CBType.`cbType`
       result.CBVar.payload.`cbVal` = cast[outputType](v)
