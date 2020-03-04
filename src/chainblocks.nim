@@ -36,9 +36,9 @@ type
     len*: uint32
     cap*: uint32
   CBEnum* {.importc: "CBEnum", header: "chainblocks.h".} = distinct int32
-  CBChain* {.importc: "CBChain", header: "chainblocks.h".} = object
+  CBChain* {.importc: "struct CBChain", header: "chainblocks.h".} = object
   CBChainPtr* = ptr CBChain
-  CBNode* {.importc: "CBNode", header: "chainblocks.h".} = object
+  CBNode* {.importc: "struct CBNode", header: "chainblocks.h".} = object
   CBContextObj* {.importc: "struct CBContext", header: "chainblocks.h".} = object
   CBContext* = ptr CBContextObj
 
@@ -64,7 +64,7 @@ type
     tableClear: proc(table: CBTable) {.cdecl.}
     tableFree: proc(table: CBTable) {.cdecl.}
 
-  CBType* {.importc: "CBType", header: "chainblocks.h", size: sizeof(uint8).} = enum
+  CBType* {.importc: "CBType", header: "chainblocks.h", size: sizeof(uint8), pure.} = enum
     None,
     Any,
     Object,
@@ -235,6 +235,8 @@ type
 
     mutate*: CBMutateProc
 
+  CBlockPtr* = ptr CBlock
+
   CBBlockConstructor* {.importc: "CBBlockConstructor", header: "chainblocks.h".} = proc(): ptr CBlock {.cdecl.}
  
   CBlocks* {.importc: "CBlocks", header: "chainblocks.h".} = object
@@ -292,44 +294,6 @@ proc `=`(dst: var Var; source: Var) {.inline.} =
   zeroMem(addr dst, sizeof(CBVar))
   Core.cloneVar(addr dst, unsafeaddr source)
 
-converter toVar*(v: CBVar): Var {.inline.} =
-  Core.cloneVar(addr result, unsafeaddr v)
-
-macro generateVarConverter(nimVal, cbType, cbVal: untyped): untyped =
-  let
-    toName = ident("convertToCB" & $cbType)
-    fromName = ident("convertFromCB" & $cbType)
-
-  return quote do:
-    converter `toName`*(v: var Var): `nimVal` {.inline.} =
-      when `nimVal` is SomeInteger:
-        assert `nimVal`.high <= int64.high
-
-      when `nimVal` is SomeFloat:
-        assert `nimVal`.high <= float64.high
-
-      assert v.CBVar.valueType == CBType.`cbType`
-      v.CBVar.payload.`cbVal`.`nimVal`
-
-    converter `fromName`*(v: int): Var {.inline.} =
-      type outputType = typeof(result.CBVar.payload.`cbVal`)
-      result.CBVar.valueType = CBType.`cbType`
-      result.CBVar.payload.`cbVal` = cast[outputType](v)
-
-generateVarConverter int, Int, intValue
-generateVarConverter float64, Float, floatValue
-generateVarConverter float32, Float, floatValue
-
-converter toString*(v: var Var): string =
-  assert v.CBVar.valueType == CBType.String
-  $(cast[cstring](v.CBVar.payload.stringValue))
-
-converter fromString*(v: string): Var {.inline.} =
-  var tmp: CBVar
-  tmp.valueType = CBType.String
-  tmp.payload.stringValue = cast[CBString](v.cstring)
-  Core.cloneVar(addr result, addr tmp)
-
 iterator items*(arr: TCBArrays): auto {.inline.} =
   for i in 0..<arr.len:
     yield arr.elements[i]
@@ -345,14 +309,6 @@ proc `[]`*(v: TCBArrays; index: int): auto {.inline, noinit.} =
 proc `[]=`*(v: var TCBArrays; index: int; value: auto) {.inline.} =
   assert index < v.len.int
   v.elements[index] = value
-
-proc toTable*(t: CBTable): Table[string, Var] =
-  result = initTable[string, Var]()
-  proc cb(key: cstring; value: ptr CBVar; data: pointer): CBBool {.cdecl.} =
-    var res = cast[ptr Table[string, Var]](data)
-    res[][$key] = value[]
-    true
-  t.api[].tableForEach(t, cb, addr result)
 
 proc `[]=`*(t: var CBTable; key: string; val: CBVar) =
   var varPtr = t.api[].tableAt(t, key.cstring)
@@ -524,28 +480,28 @@ macro generateCBTypeInfos(t: CBType): untyped =
 let
   NoneType* = CBType.None.info()
   
-generateCBTypeInfos Any
-generateCBTypeInfos Bool
-generateCBTypeInfos Int
-generateCBTypeInfos Int2
-generateCBTypeInfos Int3
-generateCBTypeInfos Int4
-generateCBTypeInfos Int8
-generateCBTypeInfos Int16
-generateCBTypeInfos Float
-generateCBTypeInfos Float2
-generateCBTypeInfos Float3
-generateCBTypeInfos Float4
-generateCBTypeInfos Color
-generateCBTypeInfos Chain
-generateCBTypeInfos Block
-generateCBTypeInfos Bytes
-generateCBTypeInfos String
-generateCBTypeInfos Path
-generateCBTypeInfos ContextVar
-generateCBTypeInfos Image
-generateCBTypeInfos Seq
-generateCBTypeInfos Table
+generateCBTypeInfos CBType.Any
+generateCBTypeInfos CBType.Bool
+generateCBTypeInfos CBType.Int
+generateCBTypeInfos CBType.Int2
+generateCBTypeInfos CBType.Int3
+generateCBTypeInfos CBType.Int4
+generateCBTypeInfos CBType.Int8
+generateCBTypeInfos CBType.Int16
+generateCBTypeInfos CBType.Float
+generateCBTypeInfos CBType.Float2
+generateCBTypeInfos CBType.Float3
+generateCBTypeInfos CBType.Float4
+generateCBTypeInfos CBType.Color
+generateCBTypeInfos CBType.Chain
+generateCBTypeInfos CBType.Block
+generateCBTypeInfos CBType.Bytes
+generateCBTypeInfos CBType.String
+generateCBTypeInfos CBType.Path
+generateCBTypeInfos CBType.ContextVar
+generateCBTypeInfos CBType.Image
+generateCBTypeInfos CBType.Seq
+generateCBTypeInfos CBType.Table
   
 # Block interface/default
 
@@ -742,7 +698,37 @@ macro chainblock*(blk: untyped; blockName: string; namespaceStr: string = ""; te
     `blk`.init()
 
 # must link like -Wl,--whole-archive -lhttp -Wl,--no-whole-archive
-      
+
+proc Chain(
+  name: string = "",
+  looped: bool = false,
+  unsafe: bool = false): ptr CBChain =
+  discard
+
+proc Msg(message: Var): seq[ptr CBlock] =
+  # create
+  # setup
+  # setparam
+  # add to chain
+  # return chain
+  discard
+
+proc Msg(blks: seq[ptr CBlock], message: Var): seq[ptr CBlock] =
+  # create
+  # setup
+  # setparam
+  # add to chain
+  # return chain
+  discard
+
+proc Msg(chain: ptr CBChain, message: Var): ptr CBChain =
+  # create
+  # setup
+  # setparam
+  # add to chain
+  # return chain
+  discard
+
 when isMainModule and defined(testing):
   type
     CBPow2Block = object
@@ -773,6 +759,13 @@ when isMainModule and defined(testing):
   echo x.CBVar
 
   var s: string = sv
+
+  let c =
+    Chain()
+    .Msg(
+      message = "Hello"
+    )
+    .Msg("World")
 
   let
     info1 = CBType.Object.info()

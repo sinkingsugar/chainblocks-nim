@@ -1,3 +1,50 @@
+converter toVar*(v: CBVar): Var {.inline.} =
+  Core.cloneVar(addr result, unsafeaddr v)
+
+macro generateVarConverter(nimVal, cbType, cbVal: untyped): untyped =
+  let
+    toName = ident("convertToCB" & $cbType)
+    fromName = ident("convertFromCB" & $cbType)
+
+  return quote do:
+    converter `toName`*(v: var Var): `nimVal` {.inline.} =
+      when `nimVal` is SomeInteger:
+        assert `nimVal`.high <= int64.high
+
+      when `nimVal` is SomeFloat:
+        assert `nimVal`.high <= float64.high
+
+      assert v.CBVar.valueType == CBType.`cbType`
+      v.CBVar.payload.`cbVal`.`nimVal`
+
+    converter `fromName`*(v: int): Var {.inline.} =
+      type outputType = typeof(result.CBVar.payload.`cbVal`)
+      result.CBVar.valueType = CBType.`cbType`
+      result.CBVar.payload.`cbVal` = cast[outputType](v)
+
+generateVarConverter int, Int, intValue
+generateVarConverter float64, Float, floatValue
+generateVarConverter float32, Float, floatValue
+generateVarConverter CBlockPtr, Block, blockValue
+
+converter toString*(v: var Var): string {.inline.} =
+  assert v.CBVar.valueType == CBType.String
+  $(cast[cstring](v.CBVar.payload.stringValue))
+
+converter fromString*(v: string): Var {.inline.} =
+  var tmp: CBVar
+  tmp.valueType = CBType.String
+  tmp.payload.stringValue = cast[CBString](v.cstring)
+  Core.cloneVar(addr result, addr tmp)
+
+proc toTable*(t: CBTable): Table[string, Var] =
+  result = initTable[string, Var]()
+  proc cb(key: cstring; value: ptr CBVar; data: pointer): CBBool {.cdecl.} =
+    var res = cast[ptr Table[string, Var]](data)
+    res[][$key] = value[]
+    true
+  t.api[].tableForEach(t, cb, addr result)
+
 template chainState*(v: CBVar): auto = v.payload.chainState
 template objectValue*(v: CBVar): auto = v.payload.objectValue
 template objectVendorId*(v: CBVar): auto = v.payload.objectVendorId

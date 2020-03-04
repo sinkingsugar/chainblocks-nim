@@ -25,7 +25,7 @@ task testcpp, "Build all":
   exec build("src/chainblocks.nim", {Run, Test, CppBuild})
 
 task testfull, "Build all":
-  exec build("src/chainblocks.nim", {Run, Test, FullDeps})
+  exec build("src/chainblocks.nim", {Run, Test, CDebug, FullDeps})
 
 task gdb, "Build all":
   exec build("src/chainblocks.nim", {Run, Test, CDebug})
